@@ -1,0 +1,54 @@
+name: Deploy KEVLAR
+
+# Builds the web export and publishes it to GitHub Pages.
+# The site is static and self-contained — once installed on a device it never
+# calls back here, so this only matters for the first install and reinstalls.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Icons are generated rather than committed as binaries.
+      - run: node scripts/make-icons.js
+
+      - run: npx expo export --platform web
+
+      # Injects the PWA head: standalone meta, shell CSS, service worker.
+      - run: node scripts/finalize-web.js
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
