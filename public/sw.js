@@ -7,7 +7,12 @@
  * enough to make the app permanently offline-capable.
  */
 
-const CACHE = 'kevlar-v1';
+/*
+ * Bumping this name is what actually forces a refresh: `activate` deletes
+ * every cache that is not the current one, so a rename discards the old
+ * build wholesale rather than hoping each entry revalidates.
+ */
+const CACHE = 'kevlar-v2';
 const SHELL = './';
 
 self.addEventListener('install', (event) => {

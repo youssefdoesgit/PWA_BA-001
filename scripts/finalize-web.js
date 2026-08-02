@@ -56,7 +56,20 @@ const HEAD = `
     <script id="kevlar-bootstrap">
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          navigator.serviceWorker.register('./sw.js').catch(function () {});
+          // updateViaCache:'none' stops the browser serving sw.js itself from
+          // HTTP cache. Without it iOS can run a months-old worker and never
+          // notice a new build exists.
+          navigator.serviceWorker
+            .register('./sw.js', { updateViaCache: 'none' })
+            .then(function (reg) {
+              reg.update();
+              // Re-check whenever the app is brought back to the foreground,
+              // which for an installed PWA is the only reliable moment.
+              document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) reg.update();
+              });
+            })
+            .catch(function () {});
         });
       }
       // Ask iOS to treat the ledger as persistent rather than evictable cache.
