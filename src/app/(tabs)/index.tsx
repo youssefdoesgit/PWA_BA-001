@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { SyncPip } from '@/components/sync-pip';
 import { Bric, LeaderRow } from '@/components/ui/agency';
 import { CurrencyStrip } from '@/components/ui/currency-strip';
 import { Rise, useRolling, useTypewriter } from '@/components/ui/motion';
@@ -43,9 +44,12 @@ export default function Home() {
       <Screen>
         <Rise>
           <Row style={{ justifyContent: 'space-between', marginBottom: space.md }}>
-            <Txt variant="micro" spaced tone={color.rust} weight="bold">
-              KEVLAR
-            </Txt>
+            <Row style={{ gap: space.md, alignItems: 'center' }}>
+              <Txt variant="micro" spaced tone={color.rust} weight="bold">
+                KEVLAR
+              </Txt>
+              <SyncPip />
+            </Row>
             <Pressable onPress={() => router.push('/settings')} hitSlop={14}>
               <Txt variant="title" dim>
                 ⚙

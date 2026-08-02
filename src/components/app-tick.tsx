@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
-import { runSync, watchForChanges } from '@/lib/autosync';
+import { runSync, startPolling, watchForChanges } from '@/lib/autosync';
 import { bricOnBillsPosted } from '@/lib/bric';
 import { useSession } from '@/lib/session';
 import { dueSoon, useStore } from '@/lib/store';
@@ -64,8 +64,14 @@ export function AppTick() {
 
     void runSync('open');
     const unwatch = watchForChanges();
+    const stopPolling = startPolling();
 
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return unwatch;
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return () => {
+        unwatch();
+        stopPolling();
+      };
+    }
 
     const onVisible = () => {
       if (!document.hidden) void runSync('foreground');
@@ -73,6 +79,7 @@ export function AppTick() {
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       unwatch();
+      stopPolling();
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [hydrated]);

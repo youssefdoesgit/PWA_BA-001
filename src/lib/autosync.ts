@@ -53,6 +53,8 @@ export async function runSync(
 
   if (!syncUrl || !syncKey || !passphrase) return { ok: false, error: 'Sync is not set up.' };
   if (inFlight) return { ok: false, error: 'Already syncing.' };
+  // Polling and foreground events can arrive together; the throttle keeps
+  // that from turning into a burst of requests.
   if (reason !== 'manual' && Date.now() - lastRunAt < MIN_GAP_MS) {
     return { ok: false, error: 'Too soon.' };
   }
@@ -97,6 +99,23 @@ export async function runSync(
     inFlight = false;
     useSession.getState().setSyncing(false);
   }
+}
+
+/**
+ * Polls while the app is on screen.
+ *
+ * Foreground and open events cover switching between devices, but not the
+ * case where both are open at once — the PC sitting there while something is
+ * logged on the phone. A slow poll makes that feel continuous without
+ * hammering the server.
+ */
+export function startPolling(everyMs = 45_000): () => void {
+  const tick = () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    void runSync('changes');
+  };
+  const id = setInterval(tick, everyMs);
+  return () => clearInterval(id);
 }
 
 /** Cheap fingerprint of the data, used to notice real edits. */
