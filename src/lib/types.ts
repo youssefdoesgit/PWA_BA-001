@@ -116,6 +116,12 @@ export type Settings = {
   syncKey?: string;
   /** Proves a passphrase is the right one without a round trip. */
   passphraseCheck?: string;
+  /**
+   * Held on the device so sync can run unattended. No worse than the ledger
+   * it protects, which sits in the same storage — but it is the reason the
+   * app lock exists.
+   */
+  passphrase?: string;
   syncedAt?: number;
 };
 

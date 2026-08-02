@@ -26,6 +26,12 @@ type Session = {
 
   updateReady: boolean;
   setUpdateReady: (v: boolean) => void;
+
+  /** True while a sync is in flight, so nothing starts a second one. */
+  syncing: boolean;
+  setSyncing: (v: boolean) => void;
+  lastSyncError: string | null;
+  setLastSyncError: (v: string | null) => void;
 };
 
 let counter = 0;
@@ -40,4 +46,9 @@ export const useSession = create<Session>()((set) => ({
 
   updateReady: false,
   setUpdateReady: (v) => set({ updateReady: v }),
+
+  syncing: false,
+  setSyncing: (v) => set({ syncing: v }),
+  lastSyncError: null,
+  setLastSyncError: (v) => set({ lastSyncError: v }),
 }));

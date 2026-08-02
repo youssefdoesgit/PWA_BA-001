@@ -41,6 +41,7 @@ function forUpload(data: KevlarData): KevlarData {
   delete settings.syncUrl;
   delete settings.syncKey;
   delete settings.passphraseCheck;
+  delete settings.passphrase;
   delete settings.syncedAt;
   return { ...data, settings };
 }

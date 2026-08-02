@@ -45,6 +45,7 @@ function mergeSettings(local: Settings, remote: Settings): Settings {
     syncUrl: local.syncUrl,
     syncKey: local.syncKey,
     passphraseCheck: local.passphraseCheck,
+    passphrase: local.passphrase,
     syncedAt: local.syncedAt,
     // Whether *this* device has seen the tutorial is also local.
     onboarded: local.onboarded,

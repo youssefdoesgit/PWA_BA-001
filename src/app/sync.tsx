@@ -6,22 +6,19 @@ import { BricSays, FileHeader, LeaderRow } from '@/components/ui/agency';
 import { Rise } from '@/components/ui/motion';
 import { notify } from '@/components/ui/press';
 import { Button, Card, Row, Rule, Screen, SectionTitle, Txt } from '@/components/ui/primitives';
-import { fingerprint } from '@/lib/crypto';
-import { useSession } from '@/lib/session';
+import { runSync } from '@/lib/autosync';
 import { useStore } from '@/lib/store';
-import { syncNow, testConnection } from '@/lib/sync';
+import { testConnection } from '@/lib/sync';
 import { color, radius, space } from '@/theme/tokens';
 
 export default function Sync() {
   const router = useRouter();
   const settings = useStore((s) => s.settings);
   const updateSettings = useStore((s) => s.updateSettings);
-  const replaceAll = useStore((s) => s.replaceAll);
-  const say = useSession((s) => s.say);
 
   const [url, setUrl] = useState(settings.syncUrl ?? '');
   const [key, setKey] = useState(settings.syncKey ?? '');
-  const [phrase, setPhrase] = useState('');
+  const [phrase, setPhrase] = useState(settings.passphrase ?? '');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -46,7 +43,8 @@ export default function Sync() {
   }
 
   async function run() {
-    if (!phrase.trim()) {
+    const pass = phrase.trim();
+    if (!pass) {
       setStatus('Enter your passphrase.');
       return;
     }
@@ -58,49 +56,20 @@ export default function Sync() {
     setBusy(true);
     setStatus('Syncing…');
 
-    const local = useStore.getState();
-    const result = await syncNow(
-      {
-        version: local.version,
-        categories: local.categories,
-        transactions: local.transactions,
-        budgets: local.budgets,
-        goals: local.goals,
-        recurring: local.recurring,
-        settings: local.settings,
-      },
-      phrase.trim(),
-      { url: settings.syncUrl, key: settings.syncKey }
-    );
+    // Persist it first: runSync reads the passphrase from settings, and this
+    // is also what lets sync happen unattended from here on.
+    updateSettings({ passphrase: pass });
 
+    const result = await runSync('manual');
+
+    setBusy(false);
     if (!result.ok) {
-      setBusy(false);
-      setStatus(result.error);
+      setStatus(result.error ?? 'Sync failed.');
       notify('error');
       return;
     }
 
-    // Keep this device's own backend config and remember the passphrase shape
-    // so a typo can be caught before the next round trip.
-    replaceAll({
-      ...result.merged,
-      settings: {
-        ...result.merged.settings,
-        syncUrl: settings.syncUrl,
-        syncKey: settings.syncKey,
-        passphraseCheck: await fingerprint(phrase.trim()),
-        syncedAt: Date.now(),
-      },
-    });
-
-    setBusy(false);
     setStatus(null);
-    say(
-      result.pulled
-        ? 'Synced, sir. Both devices are holding the same ledger.'
-        : 'Uploaded. Nothing was up there yet, so this device set the baseline.',
-      { mood: 'happy' }
-    );
     notify('success');
     router.back();
   }

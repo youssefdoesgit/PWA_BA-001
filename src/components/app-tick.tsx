@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
+import { runSync, watchForChanges } from '@/lib/autosync';
 import { bricOnBillsPosted } from '@/lib/bric';
 import { useSession } from '@/lib/session';
 import { dueSoon, useStore } from '@/lib/store';
@@ -56,6 +57,25 @@ export function AppTick() {
     if (count > 0) void nav.setAppBadge(count).catch(() => {});
     else void nav.clearAppBadge?.().catch(() => {});
   }, [recurring, hydrated]);
+
+  /* Sync on open, on return to the foreground, and after edits settle. */
+  useEffect(() => {
+    if (!hydrated) return;
+
+    void runSync('open');
+    const unwatch = watchForChanges();
+
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return unwatch;
+
+    const onVisible = () => {
+      if (!document.hidden) void runSync('foreground');
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      unwatch();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [hydrated]);
 
   /* A newer build finished caching in the background. */
   useEffect(() => {
