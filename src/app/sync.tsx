@@ -7,14 +7,16 @@ import { Rise } from '@/components/ui/motion';
 import { notify } from '@/components/ui/press';
 import { Button, Card, Row, Rule, Screen, SectionTitle, Txt } from '@/components/ui/primitives';
 import { runSync } from '@/lib/autosync';
+import { fingerprint } from '@/lib/crypto';
 import { useStore } from '@/lib/store';
-import { testConnection } from '@/lib/sync';
+import { pullOnly, testConnection } from '@/lib/sync';
 import { color, radius, space } from '@/theme/tokens';
 
 export default function Sync() {
   const router = useRouter();
   const settings = useStore((s) => s.settings);
   const updateSettings = useStore((s) => s.updateSettings);
+  const replaceAll = useStore((s) => s.replaceAll);
 
   const [url, setUrl] = useState(settings.syncUrl ?? '');
   const [key, setKey] = useState(settings.syncKey ?? '');
@@ -72,6 +74,47 @@ export default function Sync() {
     setStatus(null);
     notify('success');
     router.back();
+  }
+
+  /** Take the server copy wholesale. For adopting a freshly installed device. */
+  async function adopt() {
+    const pass = phrase.trim();
+    if (!pass) {
+      setStatus('Enter your passphrase.');
+      return;
+    }
+    if (!settings.syncUrl || !settings.syncKey) {
+      setStatus('Connect to a server first.');
+      return;
+    }
+
+    setBusy(true);
+    setStatus('Downloading…');
+
+    const res = await pullOnly(pass, { url: settings.syncUrl, key: settings.syncKey });
+    setBusy(false);
+
+    if (!res.ok) {
+      setStatus(res.error);
+      notify('error');
+      return;
+    }
+
+    replaceAll({
+      ...res.data,
+      settings: {
+        ...res.data.settings,
+        syncUrl: settings.syncUrl,
+        syncKey: settings.syncKey,
+        passphrase: pass,
+        passphraseCheck: await fingerprint(pass),
+        syncedAt: Date.now(),
+      },
+    });
+
+    setStatus(null);
+    notify('success');
+    router.replace('/');
   }
 
   return (
@@ -174,6 +217,19 @@ export default function Sync() {
             disabled={busy || !configured}
             onPress={run}
           />
+          <Button
+            label="Replace this device from server"
+            kind="ghost"
+            full
+            disabled={busy || !configured}
+            style={{ marginTop: space.sm }}
+            onPress={adopt}
+          />
+          <Txt variant="micro" faint style={{ marginTop: space.sm, lineHeight: 16 }}>
+            Use this when setting up a new device. It discards whatever is on this one and takes
+            the server copy exactly, rather than merging.
+          </Txt>
+
           {status && (
             <Txt
               variant="micro"

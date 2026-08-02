@@ -35,22 +35,43 @@ function mergeList<T extends WithId>(local: T[], remote: T[]): T[] {
   return [...byId.values()];
 }
 
-function mergeSettings(local: Settings, remote: Settings): Settings {
-  const newer = (remote.settingsUpdatedAt ?? 0) > (local.settingsUpdatedAt ?? 0) ? remote : local;
+/** Never travels: how *this* device reaches the server is its own business. */
+const DEVICE_ONLY = ['syncUrl', 'syncKey', 'passphrase', 'passphraseCheck', 'syncedAt'] as const;
 
-  return {
-    ...newer,
-    // Backend config and the passphrase check are per-device concerns — never
-    // let a merge overwrite how this device reaches the server.
-    syncUrl: local.syncUrl,
-    syncKey: local.syncKey,
-    passphraseCheck: local.passphraseCheck,
-    passphrase: local.passphrase,
-    syncedAt: local.syncedAt,
-    // Whether *this* device has seen the tutorial is also local.
-    onboarded: local.onboarded,
-    tourDone: local.tourDone,
-  };
+function mergeSettings(local: Settings, remote: Settings): Settings {
+  const lt = local.fieldTimes ?? {};
+  const rt = remote.fieldTimes ?? {};
+
+  // Fall back to the coarse timestamp for anything written before per-field
+  // stamps existed, so older data still resolves sensibly.
+  const lFallback = local.settingsUpdatedAt ?? 0;
+  const rFallback = remote.settingsUpdatedAt ?? 0;
+
+  const keys = new Set([...Object.keys(local), ...Object.keys(remote)]);
+  const out = { ...local } as Record<string, unknown>;
+
+  for (const key of keys) {
+    if ((DEVICE_ONLY as readonly string[]).includes(key)) continue;
+    if (key === 'fieldTimes' || key === 'settingsUpdatedAt') continue;
+
+    const lTime = lt[key] ?? lFallback;
+    const rTime = rt[key] ?? rFallback;
+    // Ties go to remote so both devices converge on the same answer.
+    if (rTime >= lTime) out[key] = (remote as Record<string, unknown>)[key];
+  }
+
+  for (const key of DEVICE_ONLY) {
+    out[key] = (local as Record<string, unknown>)[key];
+  }
+
+  out.fieldTimes = { ...rt, ...lt };
+  for (const key of keys) {
+    const t = Math.max(lt[key] ?? 0, rt[key] ?? 0);
+    if (t) (out.fieldTimes as Record<string, number>)[key] = t;
+  }
+  out.settingsUpdatedAt = Math.max(lFallback, rFallback);
+
+  return out as Settings;
 }
 
 export function mergeData(local: KevlarData, remote: KevlarData): KevlarData {

@@ -217,7 +217,16 @@ export const useStore = create<KevlarStore>()(
       },
 
       updateSettings: (patch) =>
-        set((s) => ({ settings: { ...s.settings, ...patch, settingsUpdatedAt: Date.now() } })),
+        set((s) => {
+          const now = Date.now();
+          // Stamp each key individually so a merge can reconcile field by
+          // field instead of picking one device's whole settings object.
+          const fieldTimes = { ...(s.settings.fieldTimes ?? {}) };
+          for (const k of Object.keys(patch)) fieldTimes[k] = now;
+          return {
+            settings: { ...s.settings, ...patch, fieldTimes, settingsUpdatedAt: now },
+          };
+        }),
       replaceAll: (data) => set({ ...data }),
       resetAll: () => set({ ...emptyData() }),
 

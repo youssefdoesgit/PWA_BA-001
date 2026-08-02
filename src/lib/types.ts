@@ -111,8 +111,14 @@ export type Settings = {
 
   /* --- Sync ------------------------------------------------------------- */
 
-  /** Last local change to settings, so a merge can pick the newer side. */
+  /** Last local change to settings, kept as a coarse fallback. */
   settingsUpdatedAt?: number;
+  /**
+   * Per-field change times. Settings are merged key by key rather than as a
+   * whole object, so changing the currency here cannot silently discard a name
+   * changed on the other device.
+   */
+  fieldTimes?: Record<string, number>;
   /** Where the encrypted blob lives. Stored locally, never committed. */
   syncUrl?: string;
   syncKey?: string;

@@ -130,6 +130,35 @@ export async function syncNow(
   }
 }
 
+/**
+ * Downloads the server copy and returns it verbatim, with no merge.
+ *
+ * For adopting a device: a fresh install has just been through onboarding, so
+ * its settings are genuinely the newest and would win a merge — overwriting
+ * the ledger you actually care about. This takes the server's word instead.
+ */
+export async function pullOnly(
+  passphrase: string,
+  cfg: SyncConfig
+): Promise<{ ok: true; data: KevlarData } | { ok: false; error: string }> {
+  if (!cfg.url || !cfg.key) return { ok: false, error: 'Sync is not configured.' };
+  if (!passphrase) return { ok: false, error: 'No passphrase set.' };
+
+  try {
+    const [key, id] = await Promise.all([deriveKey(passphrase), deriveSyncId(passphrase)]);
+    const blob = await pull(cfg, id);
+    if (!blob) return { ok: false, error: 'There is nothing stored on the server yet.' };
+
+    try {
+      return { ok: true, data: await open<KevlarData>(key, blob) };
+    } catch {
+      return { ok: false, error: 'That passphrase does not match the stored data.' };
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** Verifies credentials without touching any data. */
 export async function testConnection(cfg: SyncConfig): Promise<{ ok: boolean; error?: string }> {
   try {
