@@ -69,11 +69,18 @@ export const swatch = [
   '#9A8A6A',
 ] as const;
 
-/** Monospace stack. No bundled font files — these ship with every OS. */
+/**
+ * Monospace stack. No bundled font files — these ship with every OS.
+ *
+ * `ui-monospace` resolves to SF Mono on Apple platforms, which is materially
+ * wider and heavier than Courier New. That matters: the PWA runs as web even
+ * on the phone, and the Courier fallback reads thin and cramped at small sizes.
+ */
 export const mono = Platform.select({
   ios: 'Menlo',
   android: 'monospace',
-  default: '"Courier New", Courier, monospace',
+  default:
+    'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Roboto Mono", monospace',
 }) as string;
 
 export const space = {
@@ -96,14 +103,16 @@ export const radius = {
 } as const;
 
 export const font = {
+  // Bumped roughly 15% across the board — monospace runs visually smaller
+  // than a proportional face at the same nominal size.
   size: {
-    micro: 10,
-    caption: 12,
-    body: 14,
-    lead: 16,
-    title: 20,
-    display: 30,
-    hero: 40,
+    micro: 12,
+    caption: 14,
+    body: 16,
+    lead: 18,
+    title: 23,
+    display: 34,
+    hero: 46,
   },
   weight: {
     regular: '400',

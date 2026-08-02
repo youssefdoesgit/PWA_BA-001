@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { FileHeader } from '@/components/ui/agency';
-import { Amount, Bar, Bubble, Card, Empty, Row, Screen, SectionTitle, Txt } from '@/components/ui/primitives';
+import { Amount, Bar, Bubble, Card, Empty, Row, Rule, Screen, SectionTitle, Txt } from '@/components/ui/primitives';
+import { TrendChart } from '@/components/ui/trend-chart';
 import { endOfBudgetMonth, monthLabel, startOfBudgetMonth } from '@/lib/date';
 import { formatMoney, parseAmount } from '@/lib/money';
-import { monthTotals, spendByCategory, useData, useStore } from '@/lib/store';
+import { monthHistory, monthTotals, spendByCategory, useData, useStore } from '@/lib/store';
 import { color, radius, space } from '@/theme/tokens';
 
 export default function Budgets() {
@@ -19,6 +20,7 @@ export default function Budgets() {
 
   const now = Date.now();
   const spend = useMemo(() => spendByCategory(data, now), [data, now]);
+  const history = useMemo(() => monthHistory(data, 6, now), [data, now]);
   const month = monthTotals(data, now);
 
   const expenseCats = data.categories.filter((c) => !c.archived && c.kind === 'expense');
@@ -196,6 +198,41 @@ export default function Budgets() {
           })}
         </Card>
       )}
+
+      {/* Trend across recent months */}
+      <SectionTitle>Trend</SectionTitle>
+      {history.every((m) => m.income === 0 && m.expense === 0) ? (
+        <Card>
+          <Txt variant="caption" dim style={{ textAlign: 'center', lineHeight: 19 }}>
+            Not enough history yet. Log through a full month and the shape of your spending shows
+            up here.
+          </Txt>
+        </Card>
+      ) : (
+        <Card label="last 6 months">
+          <TrendChart months={history} format={(c) => formatMoney(c, currency, { compact: true })} />
+          <Rule />
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt variant="micro" faint>
+              AVERAGE OUT
+            </Txt>
+            <Amount variant="caption" tone={color.expense}>
+              {formatMoney(
+                Math.round(history.reduce((n, m) => n + m.expense, 0) / history.length),
+                currency
+              )}
+            </Amount>
+          </Row>
+          <Row style={{ justifyContent: 'space-between', marginTop: 4 }}>
+            <Txt variant="micro" faint>
+              BEST MONTH
+            </Txt>
+            <Amount variant="caption" tone={color.income}>
+              {formatMoney(Math.max(...history.map((m) => m.net)), currency, { signed: true })}
+            </Amount>
+          </Row>
+        </Card>
+      )}
     </Screen>
   );
 }
@@ -210,7 +247,7 @@ const s = StyleSheet.create({
     borderColor: color.borderHi,
     paddingHorizontal: space.sm,
     color: color.text,
-    fontSize: 14,
+    fontSize: 16,
     textAlign: 'right',
   },
 });

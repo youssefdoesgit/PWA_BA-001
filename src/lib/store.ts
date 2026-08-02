@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { swatch } from '@/theme/tokens';
-import { advance, endOfBudgetMonth, startOfBudgetMonth } from './date';
+import { addMonths, advance, endOfBudgetMonth, startOfBudgetMonth } from './date';
 import type {
   Budget,
   Category,
@@ -98,6 +98,11 @@ type Actions = {
   updateSettings: (patch: Partial<Settings>) => void;
   replaceAll: (data: KevlarData) => void;
   resetAll: () => void;
+
+  /** Validates and loads an exported backup. */
+  restore: (raw: unknown) => { ok: boolean; error?: string };
+  /** Posts every recurring bill whose due date has passed. Returns how many. */
+  postDueRecurring: () => number;
 };
 
 export type KevlarStore = KevlarData & { hydrated: boolean } & Actions;
@@ -186,6 +191,69 @@ export const useStore = create<KevlarStore>()(
       updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       replaceAll: (data) => set({ ...data }),
       resetAll: () => set({ ...emptyData() }),
+
+      restore: (raw) => {
+        // A backup is the only copy, so be strict rather than forgiving —
+        // half-importing a malformed file would be worse than refusing it.
+        if (!raw || typeof raw !== 'object') return { ok: false, error: 'Not a KEVLAR backup.' };
+        const d = raw as Partial<KevlarData>;
+        const lists: (keyof KevlarData)[] = [
+          'categories',
+          'transactions',
+          'budgets',
+          'goals',
+          'recurring',
+        ];
+        for (const key of lists) {
+          if (!Array.isArray(d[key])) return { ok: false, error: `Missing or invalid "${key}".` };
+        }
+        if (!d.settings || typeof d.settings !== 'object') {
+          return { ok: false, error: 'Missing settings.' };
+        }
+        if (!d.transactions!.every((t) => typeof t?.amount === 'number' && typeof t?.date === 'number')) {
+          return { ok: false, error: 'Transaction records are malformed.' };
+        }
+
+        set({
+          version: DATA_VERSION,
+          categories: d.categories!,
+          transactions: d.transactions!,
+          budgets: d.budgets!,
+          goals: d.goals!,
+          recurring: d.recurring!,
+          // Merge over defaults so a backup from an older build still opens.
+          settings: { ...seedSettings(), ...d.settings },
+        });
+        return { ok: true };
+      },
+
+      postDueRecurring: () => {
+        const now = Date.now();
+        const due = get().recurring.filter((r) => r.active && r.nextDue <= now);
+        if (due.length === 0) return 0;
+
+        for (const bill of due) {
+          // A bill left unopened for months should post every occurrence it
+          // missed, not just the most recent one.
+          let cursor = bill.nextDue;
+          let guard = 0;
+          while (cursor <= now && guard < 240) {
+            get().addTransaction({
+              kind: 'expense',
+              amount: bill.amount,
+              categoryId: bill.categoryId,
+              note: bill.name,
+              date: cursor,
+            });
+            cursor = advance(cursor, bill.every, bill.unit);
+            guard += 1;
+          }
+          set((s) => ({
+            recurring: s.recurring.map((r) => (r.id === bill.id ? { ...r, nextDue: cursor } : r)),
+          }));
+        }
+        return due.length;
+      },
     }),
     {
       name: 'kevlar-v2',
@@ -263,6 +331,62 @@ export function monthTotals(data: KevlarData, at = Date.now()): MonthTotals {
     else expense += t.amount;
   }
   return { income, expense, net: income - expense };
+}
+
+/** Bills landing within `hours`, plus anything already overdue. */
+export function dueSoon(data: KevlarData, hours = 48): Recurring[] {
+  const limit = Date.now() + hours * 3600_000;
+  return data.recurring
+    .filter((r) => r.active && r.nextDue <= limit)
+    .sort((a, b) => a.nextDue - b.nextDue);
+}
+
+export type MonthSlice = {
+  /** Start of the budget month. */
+  start: number;
+  income: number;
+  expense: number;
+  net: number;
+};
+
+/**
+ * The last `count` budget months, oldest first. Used for the trend charts and
+ * the closing statement's comparison figures.
+ */
+export function monthHistory(data: KevlarData, count = 6, at = Date.now()): MonthSlice[] {
+  const { monthStartDay } = data.settings;
+  const out: MonthSlice[] = [];
+
+  for (let i = count - 1; i >= 0; i--) {
+    // Step back through months by landing mid-month, which avoids the
+    // short-month rollover bug you get from subtracting fixed day counts.
+    const probe = addMonths(at, -i);
+    const start = startOfBudgetMonth(probe, monthStartDay);
+    const end = endOfBudgetMonth(probe, monthStartDay);
+
+    let income = 0;
+    let expense = 0;
+    for (const t of data.transactions) {
+      if (t.date < start || t.date > end) continue;
+      if (t.kind === 'income') income += t.amount;
+      else expense += t.amount;
+    }
+    out.push({ start, income, expense, net: income - expense });
+  }
+  return out;
+}
+
+/** Spend per category for an arbitrary budget month. */
+export function spendByCategoryIn(data: KevlarData, at: number): Map<string, number> {
+  const start = startOfBudgetMonth(at, data.settings.monthStartDay);
+  const end = endOfBudgetMonth(at, data.settings.monthStartDay);
+  const out = new Map<string, number>();
+  for (const t of data.transactions) {
+    if (t.kind !== 'expense' || !t.categoryId) continue;
+    if (t.date < start || t.date > end) continue;
+    out.set(t.categoryId, (out.get(t.categoryId) ?? 0) + t.amount);
+  }
+  return out;
 }
 
 /** Total spent per category within the current budget month. */

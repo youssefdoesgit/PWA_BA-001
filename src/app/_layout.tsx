@@ -5,6 +5,8 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AppTick } from '@/components/app-tick';
+import { BricBar, UpdateBanner } from '@/components/bric-bar';
 import { Tour } from '@/components/tour';
 import { useStore } from '@/lib/store';
 import { color } from '@/theme/tokens';
@@ -44,11 +46,15 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="onboarding" options={{ animation: 'none' }} />
             <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="statement" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen
               name="add"
               options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
             />
           </Stack>
+          <AppTick />
+          <BricBar />
+          <UpdateBanner />
           <Tour />
         </View>
       </SafeAreaProvider>

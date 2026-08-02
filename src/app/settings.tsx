@@ -10,6 +10,8 @@ import { Rise } from '@/components/ui/motion';
 import { Button, Card, Row, Screen, SectionTitle, Txt } from '@/components/ui/primitives';
 import { CURRENCIES, byCode } from '@/lib/currency';
 import { parseAmount } from '@/lib/money';
+import { bricOnRestore } from '@/lib/bric';
+import { useSession } from '@/lib/session';
 import { useData, useStore } from '@/lib/store';
 import type { KevlarData } from '@/lib/types';
 import { color, radius, space, swatch } from '@/theme/tokens';
@@ -21,6 +23,8 @@ export default function Settings() {
   const addCategory = useStore((s) => s.addCategory);
   const removeCategory = useStore((s) => s.removeCategory);
   const resetAll = useStore((s) => s.resetAll);
+  const restore = useStore((s) => s.restore);
+  const say = useSession((s) => s.say);
 
   const [newCat, setNewCat] = useState('');
   const [newIcon, setNewIcon] = useState('🏷️');
@@ -66,6 +70,41 @@ export default function Settings() {
     } catch (e) {
       setStatus(`Export failed: ${String(e)}`);
     }
+  }
+
+  /**
+   * Reads an exported backup and replaces everything.
+   *
+   * Web-only for now: the PWA is the shipping target, and a native build would
+   * want expo-document-picker rather than a DOM file input.
+   */
+  function importData() {
+    if (Platform.OS !== 'web') {
+      setStatus('Restore is available in the installed web app.');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const parsed = JSON.parse(await file.text());
+        const result = restore(parsed);
+        if (!result.ok) {
+          setStatus(result.error ?? 'That file could not be read.');
+          return;
+        }
+        const count = Array.isArray(parsed?.transactions) ? parsed.transactions.length : 0;
+        say(bricOnRestore(count), { mood: 'happy' });
+        setStatus(null);
+        router.replace('/');
+      } catch {
+        setStatus('That file is not valid JSON.');
+      }
+    };
+    input.click();
   }
 
   function wipe() {
@@ -383,6 +422,13 @@ export default function Settings() {
             </Txt>
           )}
           <Button label="Export backup" full onPress={exportData} />
+          <Button
+            label="Restore from backup"
+            kind="ghost"
+            full
+            style={{ marginTop: space.sm }}
+            onPress={importData}
+          />
 
           {!armed ? (
             <Button
@@ -475,6 +521,6 @@ const s = StyleSheet.create({
     borderColor: color.border,
     paddingHorizontal: space.md,
     color: color.text,
-    fontSize: 15,
+    fontSize: 18,
   },
 });

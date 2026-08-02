@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
@@ -6,6 +7,7 @@ import { Rise } from '@/components/ui/motion';
 import { Amount, Card, Empty, Row, Screen, Txt } from '@/components/ui/primitives';
 import { formatIn } from '@/lib/currency';
 import { dayLabel, startOfDay } from '@/lib/date';
+import { useSession } from '@/lib/session';
 import { useData, useStore } from '@/lib/store';
 import type { Transaction, TxKind } from '@/lib/types';
 import { color, radius, space } from '@/theme/tokens';
@@ -19,8 +21,10 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 export default function Log() {
+  const router = useRouter();
   const data = useData();
   const removeTransaction = useStore((s) => s.removeTransaction);
+  const say = useSession((s) => s.say);
   const { currency } = data.settings;
 
   const [query, setQuery] = useState('');
@@ -132,7 +136,18 @@ export default function Log() {
                   return (
                     <Pressable
                       key={t.id}
-                      onLongPress={() => removeTransaction(t.id)}
+                      onPress={() => router.push({ pathname: '/add', params: { id: t.id } })}
+                      onLongPress={() => {
+                        const before = { ...t };
+                        removeTransaction(t.id);
+                        say('Deleted.', {
+                          mood: 'warn',
+                          undo: () =>
+                            useStore.setState((st) => ({
+                              transactions: [before, ...st.transactions],
+                            })),
+                        });
+                      }}
                       style={({ pressed }) => [
                         s.row,
                         i > 0 && { borderTopWidth: 1, borderTopColor: color.border },
@@ -164,7 +179,7 @@ export default function Log() {
 
       {total > 0 && (
         <Txt variant="micro" faint style={{ textAlign: 'center', marginTop: space.md }}>
-          LONG-PRESS AN ENTRY TO DELETE IT
+          TAP TO EDIT · LONG-PRESS TO DELETE
         </Txt>
       )}
     </Screen>
@@ -180,7 +195,7 @@ const s = StyleSheet.create({
     borderColor: color.border,
     paddingHorizontal: space.md,
     color: color.text,
-    fontSize: 15,
+    fontSize: 18,
   },
   tab: {
     flex: 1,

@@ -9,8 +9,10 @@
  * congratulations while you are overdrawn.
  */
 
-import { DAY } from './date';
-import { balance, monthTotals } from './store';
+import { buildInsights } from './advisor';
+import { DAY, startOfBudgetMonth } from './date';
+import { balance, dueSoon, monthTotals } from './store';
+import type { Mood } from '@/components/ui/agency';
 import type { KevlarData } from './types';
 
 /** Rotates by day so lines vary without flickering mid-session. */
@@ -152,6 +154,44 @@ export function bricOnLog(kind: 'expense' | 'income', cents: number, name: strin
   return pick(['Recorded.', 'Filed, sir.', 'Noted.', 'Duly logged.'], cents);
 }
 
+/** After an entry is reversed. */
+export function bricOnUndo(): string {
+  return pick([
+    'Struck from the record.',
+    'Undone. As though it never happened.',
+    'Reversed, sir.',
+  ]);
+}
+
+/** After an entry is edited. */
+export function bricOnEdit(): string {
+  return pick(['Amended.', 'Correction filed.', 'Updated, sir.']);
+}
+
+/** After bills post themselves on open. */
+export function bricOnBillsPosted(names: string[]): string {
+  if (names.length === 1) return `${names[0]} came out. Already recorded, sir.`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} came out. Both recorded.`;
+  return `${names.length} standing payments came out while you were away. All recorded.`;
+}
+
+/** Warning about what lands in the next couple of days. */
+export function bricBillWarning(names: string[], overdue: boolean): string {
+  if (overdue) {
+    return names.length === 1
+      ? `${names[0]} is overdue, sir.`
+      : `${names.length} payments are overdue.`;
+  }
+  return names.length === 1
+    ? `${names[0]} lands within the day. Worth having the funds ready.`
+    : `${names.length} payments land within the day.`;
+}
+
+/** After a backup is restored. */
+export function bricOnRestore(count: number): string {
+  return `Restored. ${count} ${count === 1 ? 'entry is' : 'entries are'} back on file, sir.`;
+}
+
 /** Lines shown while the analysis screen assembles itself. */
 export const THINKING = [
   'Reading the ledger…',
@@ -159,6 +199,99 @@ export const THINKING = [
   'Assessing the damage…',
   'Running the figures…',
 ];
+
+/* -------------------------------------------------------------------------- */
+/* Briefing                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type BriefTone = 'urgent' | 'warn' | 'info' | 'good';
+
+export type BriefItem = {
+  id: string;
+  text: string;
+  tone: BriefTone;
+  /** Route to open when tapped. */
+  href?: string;
+};
+
+export type Briefing = {
+  greeting: string;
+  items: BriefItem[];
+  mood: Mood;
+};
+
+const TONE_MOOD: Record<BriefTone, Mood> = {
+  urgent: 'alarm',
+  warn: 'warn',
+  info: 'think',
+  good: 'happy',
+};
+
+/**
+ * What BRIC leads with when you open the app.
+ *
+ * Ordered by how much it should worry you, so the first line is always the
+ * thing that actually matters today rather than whatever is easiest to compute.
+ */
+export function bricBriefing(data: KevlarData): Briefing {
+  const items: BriefItem[] = [];
+  const insights = buildInsights(data);
+
+  // Anything genuinely alarming from the advisory comes first.
+  for (const i of insights.filter((x) => x.severity === 'alarm').slice(0, 2)) {
+    items.push({ id: i.id, text: i.title, tone: 'urgent', href: '/advisor' });
+  }
+
+  // Money leaving in the next couple of days.
+  const soon = dueSoon(data, 48);
+  if (soon.length > 0) {
+    const overdue = soon.filter((r) => r.nextDue <= Date.now());
+    items.push({
+      id: 'bills',
+      text: bricBillWarning(
+        (overdue.length > 0 ? overdue : soon).map((r) => r.name),
+        overdue.length > 0
+      ),
+      tone: overdue.length > 0 ? 'urgent' : 'warn',
+      href: '/goals',
+    });
+  }
+
+  // A month has closed and not been reviewed.
+  const lastMonthStart = startOfBudgetMonth(
+    startOfBudgetMonth(Date.now(), data.settings.monthStartDay) - 1,
+    data.settings.monthStartDay
+  );
+  const hasPrior = data.transactions.some((t) => t.date >= lastMonthStart);
+  if (hasPrior && data.settings.lastStatementFor !== lastMonthStart) {
+    items.push({
+      id: 'statement',
+      text: 'Last month closed. Your statement is ready.',
+      tone: 'info',
+      href: '/statement',
+    });
+  }
+
+  // Then the warnings, then whatever is going well.
+  for (const i of insights.filter((x) => x.severity === 'warn').slice(0, 2)) {
+    items.push({ id: i.id, text: i.title, tone: 'warn', href: '/advisor' });
+  }
+  if (items.length === 0) {
+    const good = insights.find((x) => x.severity === 'good');
+    items.push({
+      id: good?.id ?? 'quip',
+      text: good?.title ?? bricQuip(data),
+      tone: 'good',
+      href: '/advisor',
+    });
+  }
+
+  return {
+    greeting: bricGreeting(data),
+    items: items.slice(0, 4),
+    mood: TONE_MOOD[items[0]?.tone ?? 'good'],
+  };
+}
 
 export function bricSignoff(): string {
   return pick([

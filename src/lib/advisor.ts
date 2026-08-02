@@ -121,25 +121,12 @@ export function computeMetrics(data: KevlarData, at = Date.now()): Metrics {
 /* Zakat                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export const NISAB_GOLD_GRAMS = 85;
-export const ZAKAT_RATE = 0.025;
+// Lives in ./zakat now that the hawl is tracked properly. Imported for use
+// below and re-exported so the advisory screen keeps a single import.
+import { computeZakat, NISAB_GOLD_GRAMS } from './zakat';
 
-export type Zakat = {
-  base: number;
-  nisab: number | null;
-  due: number | null;
-  eligible: boolean | null;
-};
-
-export function computeZakat(data: KevlarData): Zakat {
-  const base = balance(data);
-  const gold = data.settings.goldPricePerGram;
-  if (!gold || gold <= 0) return { base, nisab: null, due: null, eligible: null };
-
-  const nisab = Math.round(gold * NISAB_GOLD_GRAMS);
-  const eligible = base >= nisab;
-  return { base, nisab, due: eligible ? Math.round(base * ZAKAT_RATE) : 0, eligible };
-}
+export { computeZakat, HAWL_DAYS, NISAB_GOLD_GRAMS, ZAKAT_RATE } from './zakat';
+export type { ZakatState } from './zakat';
 
 /* -------------------------------------------------------------------------- */
 /* Insights                                                                   */
@@ -415,24 +402,43 @@ function islamicInsights(data: KevlarData, m: Metrics, money: (c: number) => str
   }
 
   const z = computeZakat(data);
-  if (z.eligible === null) {
+  if (z.needsGoldPrice) {
     out.push({
       id: 'zakat-setup',
       severity: 'info',
       mood: 'think',
       tag: 'zakat',
-      title: 'Zakat tracking needs one number from you',
-      body: `Put today's gold price per gram into Settings and I'll watch the nisab for you. Threshold is ${NISAB_GOLD_GRAMS}g of gold. Above it, zakat is 2.5% on qualifying wealth you've held a full lunar year.`,
+      title: 'Zakat tracking needs one figure from you',
+      body: `Enter today's gold price per gram in Settings and I shall watch the nisab on your behalf. The threshold is ${NISAB_GOLD_GRAMS}g of gold; above it, zakat is 2.5% of qualifying wealth held for a full lunar year.`,
     });
-  } else if (z.eligible && z.due) {
+  } else if (z.payable && z.due) {
     out.push({
-      id: 'zakat-due',
+      id: 'zakat-payable',
+      severity: 'alarm',
+      mood: 'alarm',
+      tag: 'zakat due',
+      title: 'Your zakat is due',
+      metric: money(z.due),
+      body: `You have held wealth above the nisab for a full lunar year. On ${money(z.base)}, that comes to roughly ${money(z.due)} at 2.5%. Mark it settled in the advisory once paid and I shall start the next year's count.`,
+    });
+  } else if (z.aboveNisab && z.daysRemaining !== null) {
+    out.push({
+      id: 'zakat-counting',
+      severity: 'info',
+      mood: 'think',
+      tag: 'hawl running',
+      title: `Zakat in ${z.daysRemaining} days`,
+      metric: money(z.due ?? 0),
+      body: `You crossed the nisab of ${money(z.nisab!)} and the hawl is running. If your wealth stays above the threshold, roughly ${money(z.due ?? 0)} falls due when the lunar year completes. Drop below the nisab and the count resets.`,
+    });
+  } else if (z.aboveNisab) {
+    out.push({
+      id: 'zakat-started',
       severity: 'info',
       mood: 'think',
       tag: 'zakat',
-      title: 'You are above the nisab',
-      metric: money(z.due),
-      body: `${money(z.base)} against a nisab of ${money(z.nisab!)}. At 2.5% that's about ${money(z.due)}, due once you've held it a full lunar year. This only counts what's logged here, so it knows nothing about your gold, property or business assets.`,
+      title: 'Above the nisab — starting the count',
+      body: `${money(z.base)} against a threshold of ${money(z.nisab!)}. I have started the hawl from today. Zakat becomes due after a full lunar year above that line.`,
     });
   } else {
     out.push({
@@ -441,7 +447,7 @@ function islamicInsights(data: KevlarData, m: Metrics, money: (c: number) => str
       mood: 'idle',
       tag: 'zakat',
       title: 'Below the nisab',
-      body: `${money(z.base)} against a threshold of ${money(z.nisab!)}. Nothing due. I'll shout when that changes.`,
+      body: `${money(z.base)} against a threshold of ${money(z.nisab!)}. Nothing is due, and no count is running. I shall tell you the moment that changes.`,
     });
   }
 

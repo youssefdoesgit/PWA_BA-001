@@ -327,7 +327,7 @@ const s = StyleSheet.create({
     borderColor: color.border,
     paddingHorizontal: space.md,
     color: color.text,
-    fontSize: 15,
+    fontSize: 18,
   },
   iconPick: {
     width: 42,

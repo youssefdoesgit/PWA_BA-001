@@ -3,52 +3,49 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Bric, LeaderRow } from '@/components/ui/agency';
 import { CurrencyStrip } from '@/components/ui/currency-strip';
-import { Rise, useRolling } from '@/components/ui/motion';
+import { Rise, useRolling, useTypewriter } from '@/components/ui/motion';
+import { Tap } from '@/components/ui/press';
 import { Amount, Card, Row, Rule, Screen, SectionTitle, Txt } from '@/components/ui/primitives';
-import { headline } from '@/lib/advisor';
-import { bricQuip } from '@/lib/bric';
+import { bricBriefing, type BriefTone } from '@/lib/bric';
 import { formatIn } from '@/lib/currency';
 import { dayLabel } from '@/lib/date';
 import { balance, monthTotals, useData } from '@/lib/store';
 import { color, glyph, radius, space } from '@/theme/tokens';
 
-/** Short, time-aware, and in BRIC's register. */
-function salutation(name: string): string {
-  const h = new Date().getHours();
-  const part =
-    h < 5 ? 'Still awake' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-  return name ? `${part}, ${name}` : `${part}, sir`;
-}
+const TONE: Record<BriefTone, string> = {
+  urgent: color.expense,
+  warn: color.warn,
+  info: color.transfer,
+  good: color.income,
+};
 
 export default function Home() {
   const router = useRouter();
   const data = useData();
-  const { currency, travelCurrencies, rateOverrides, ratesSetAt, name } = data.settings;
+  const { currency, travelCurrencies, rateOverrides, ratesSetAt } = data.settings;
 
   const total = balance(data);
   const rolled = useRolling(total);
   const month = monthTotals(data);
   const recent = data.transactions.slice(0, 4);
   const catById = new Map(data.categories.map((c) => [c.id, c]));
-  const head = headline(data);
   const money = (c: number) => formatIn(c, currency);
 
-  // The categories you reach for most, so logging is two taps from here.
+  const brief = bricBriefing(data);
+  // BRIC's greeting types itself out, so opening the app feels like he is
+  // addressing you rather than a label being rendered.
+  const greeting = useTypewriter(brief.greeting, 72);
+
   const quick = data.categories.filter((c) => !c.archived && c.kind === 'expense').slice(0, 6);
 
   return (
     <View style={{ flex: 1 }}>
       <Screen>
         <Rise>
-          <Row style={{ justifyContent: 'space-between', marginBottom: space.lg }}>
-            <View>
-              <Txt variant="micro" spaced tone={color.rust} weight="bold">
-                KEVLAR
-              </Txt>
-              <Txt variant="lead" weight="bold" style={{ marginTop: 2 }} numberOfLines={1}>
-                {salutation(name)}
-              </Txt>
-            </View>
+          <Row style={{ justifyContent: 'space-between', marginBottom: space.md }}>
+            <Txt variant="micro" spaced tone={color.rust} weight="bold">
+              KEVLAR
+            </Txt>
             <Pressable onPress={() => router.push('/settings')} hitSlop={14}>
               <Txt variant="title" dim>
                 ⚙
@@ -57,8 +54,41 @@ export default function Home() {
           </Row>
         </Rise>
 
-        {/* Balance — swipe it sideways for other currencies */}
-        <Rise delay={60}>
+        {/* BRIC leads. Everything else is his supporting material. */}
+        <Rise delay={40}>
+          <Card label="briefing" tint={TONE[brief.items[0]?.tone ?? 'good']}>
+            <Row style={{ gap: space.md, alignItems: 'flex-start' }}>
+              <Bric mood={brief.mood} size={54} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="caption" style={{ lineHeight: 19, minHeight: 38 }}>
+                  {greeting}
+                </Txt>
+              </View>
+            </Row>
+
+            <Rule />
+
+            {brief.items.map((item, i) => (
+              <Tap
+                key={item.id}
+                scale={0.99}
+                weight="light"
+                style={[s.briefRow, i > 0 ? { borderTopWidth: 1, borderTopColor: color.border } : null]}
+                onPress={() => item.href && router.push(item.href as never)}>
+                <View style={[s.dot, { backgroundColor: TONE[item.tone] }]} />
+                <Txt variant="caption" style={{ flex: 1, marginLeft: space.sm, lineHeight: 17 }}>
+                  {item.text}
+                </Txt>
+                <Txt variant="caption" tone={color.textFaint}>
+                  {glyph.arrow}
+                </Txt>
+              </Tap>
+            ))}
+          </Card>
+        </Rise>
+
+        {/* Balance — swipe sideways for other currencies */}
+        <Rise delay={100}>
           <Card label="balance" tint={color.accent} style={{ paddingVertical: space.xl }}>
             <CurrencyStrip
               cents={rolled}
@@ -80,57 +110,29 @@ export default function Home() {
         </Rise>
 
         {/* Two taps to log anything */}
-        <Rise delay={120}>
+        <Rise delay={160}>
           <SectionTitle>Quick log</SectionTitle>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: space.sm, paddingRight: space.lg }}>
             {quick.map((c) => (
-              <Pressable
+              <Tap
                 key={c.id}
-                onPress={() => router.push({ pathname: '/add', params: { category: c.id } })}
-                style={({ pressed }) => [
-                  s.quick,
-                  { borderColor: `${c.color}66` },
-                  pressed && { backgroundColor: color.surfacePress, transform: [{ translateY: 1 }] },
-                ]}>
+                weight="medium"
+                style={[s.quick, { borderColor: `${c.color}66` }]}
+                onPress={() => router.push({ pathname: '/add', params: { category: c.id } })}>
                 <Txt variant="title">{c.icon}</Txt>
                 <Txt variant="micro" tone={c.color} weight="bold" numberOfLines={1}>
                   {c.name.toUpperCase()}
                 </Txt>
-              </Pressable>
+              </Tap>
             ))}
           </ScrollView>
         </Rise>
 
-        {/* BRIC */}
-        <Rise delay={180}>
-          <Pressable onPress={() => router.push('/advisor')}>
-            <Card style={{ marginTop: space.lg }} tint={color.borderHi}>
-              <Row style={{ gap: space.md }}>
-                <Bric mood={head.mood} size={42} />
-                <View style={{ flex: 1 }}>
-                  <Txt variant="micro" spaced tone={color.rust} weight="bold">
-                    BRIC
-                  </Txt>
-                  <Txt variant="caption" style={{ marginTop: 3, lineHeight: 18 }}>
-                    {head.text}
-                  </Txt>
-                  <Txt variant="micro" faint style={{ marginTop: 4, lineHeight: 15 }}>
-                    {bricQuip(data)}
-                  </Txt>
-                </View>
-                <Txt variant="body" tone={color.accent}>
-                  {glyph.arrow}
-                </Txt>
-              </Row>
-            </Card>
-          </Pressable>
-        </Rise>
-
         {/* Recent */}
-        <Rise delay={240}>
+        <Rise delay={220}>
           <SectionTitle
             action={
               <Pressable hitSlop={8} onPress={() => router.push('/log')}>
@@ -145,7 +147,7 @@ export default function Home() {
           {recent.length === 0 ? (
             <Card>
               <Txt variant="caption" dim style={{ textAlign: 'center', lineHeight: 19 }}>
-                Nothing logged yet. Tap a category above, punch in the amount, done.
+                Nothing logged yet. Tap a category above, enter the amount, done.
               </Txt>
             </Card>
           ) : (
@@ -153,14 +155,15 @@ export default function Home() {
               {recent.map((t, i) => {
                 const cat = t.categoryId ? catById.get(t.categoryId) : undefined;
                 return (
-                  <Pressable
+                  <Tap
                     key={t.id}
-                    onPress={() => router.push('/log')}
-                    style={({ pressed }) => [
+                    scale={0.99}
+                    weight="light"
+                    style={[
                       s.txRow,
-                      i > 0 && { borderTopWidth: 1, borderTopColor: color.border },
-                      pressed && { backgroundColor: color.surfacePress },
-                    ]}>
+                      i > 0 ? { borderTopWidth: 1, borderTopColor: color.border } : null,
+                    ]}
+                    onPress={() => router.push({ pathname: '/add', params: { id: t.id } })}>
                     <Txt variant="title">{cat?.icon ?? '▦'}</Txt>
                     <View style={{ flex: 1, marginLeft: space.md }}>
                       <Txt variant="caption" weight="bold" numberOfLines={1}>
@@ -176,7 +179,7 @@ export default function Home() {
                       {t.kind === 'income' ? '+' : '−'}
                       {money(t.amount)}
                     </Amount>
-                  </Pressable>
+                  </Tap>
                 );
               })}
             </Card>
@@ -184,18 +187,26 @@ export default function Home() {
         </Rise>
       </Screen>
 
-      <Pressable
-        onPress={() => router.push('/add')}
-        style={({ pressed }) => [s.fab, pressed && { transform: [{ translateY: 2 }] }]}>
+      <Tap
+        weight="heavy"
+        scale={0.9}
+        style={s.fab}
+        onPress={() => router.push('/add')}>
         <Txt variant="title" weight="bold" tone={color.accentText}>
           +
         </Txt>
-      </Pressable>
+      </Tap>
     </View>
   );
 }
 
 const s = StyleSheet.create({
+  briefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space.sm,
+  },
+  dot: { width: 7, height: 7, borderRadius: 4 },
   quick: {
     width: 84,
     height: 76,

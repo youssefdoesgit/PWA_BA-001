@@ -79,6 +79,17 @@ export type Settings = {
   /** Gold price per gram, in minor units, for the zakat nisab. */
   goldPricePerGram?: number;
 
+  /**
+   * When your wealth last crossed the nisab threshold. Zakat falls due a full
+   * lunar year (hawl) after this, so it only resets if you drop back below.
+   */
+  hawlStartedAt?: number;
+  /** Records a hawl you have already settled, so BRIC stops asking. */
+  lastZakatPaidAt?: number;
+
+  /** Start of the most recent month BRIC has already issued a statement for. */
+  lastStatementFor?: number;
+
   lastBackupAt?: number;
 };
 

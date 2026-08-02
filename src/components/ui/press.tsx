@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { ReactNode } from 'react';
-import { Platform, Pressable, PressableProps, ViewStyle } from 'react-native';
+import { Platform, Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -40,7 +40,8 @@ export function notify(type: 'success' | 'warning' | 'error' = 'success') {
 
 type TapProps = Omit<PressableProps, 'style'> & {
   children: ReactNode;
-  style?: ViewStyle | ViewStyle[];
+  /** Accepts the usual falsy-entry arrays so callers can inline conditionals. */
+  style?: StyleProp<ViewStyle>;
   /** How far it compresses. Big surfaces should move less than small ones. */
   scale?: number;
   weight?: Weight;

@@ -2,7 +2,9 @@ import { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { BricSays, FileHeader, LeaderRow, Stamp } from '@/components/ui/agency';
-import { Amount, Bar, Card, Empty, Row, Rule, Screen, SectionTitle, Txt } from '@/components/ui/primitives';
+import { Amount, Bar, Button, Card, Empty, Row, Rule, Screen, SectionTitle, Txt } from '@/components/ui/primitives';
+import { useSession } from '@/lib/session';
+import { HAWL_DAYS, hawlCompletesOn, settleZakat } from '@/lib/zakat';
 import { buildInsights, computeMetrics, computeZakat, greeting, type Severity } from '@/lib/advisor';
 import { formatIn } from '@/lib/currency';
 import { useData, useStore } from '@/lib/store';
@@ -17,6 +19,8 @@ const TONE: Record<Severity, string> = {
 
 export default function Advisor() {
   const data = useData();
+  const updateSettings = useStore((s) => s.updateSettings);
+  const say = useSession((s) => s.say);
   const { currency } = data.settings;
 
   const now = Date.now();
@@ -131,18 +135,61 @@ export default function Advisor() {
               label="Nisab threshold"
               value={zakat.nisab === null ? 'set gold price' : money(zakat.nisab)}
             />
+            <LeaderRow
+              label="Hawl status"
+              value={
+                zakat.needsGoldPrice
+                  ? '—'
+                  : !zakat.aboveNisab
+                    ? 'not running'
+                    : zakat.payable
+                      ? 'complete'
+                      : `${zakat.daysRemaining} days left`
+              }
+              tone={zakat.payable ? color.mustard : undefined}
+            />
+            {zakat.hawlStartedAt && (
+              <LeaderRow
+                label="Due on"
+                value={new Date(hawlCompletesOn(zakat.hawlStartedAt)).toLocaleDateString()}
+              />
+            )}
+
+            {zakat.hawlStartedAt && zakat.daysRemaining !== null && (
+              <View style={{ marginTop: space.md }}>
+                <Bar
+                  pct={1 - zakat.daysRemaining / HAWL_DAYS}
+                  tint={zakat.payable ? color.mustard : color.accentDim}
+                />
+              </View>
+            )}
+
             <Rule />
             <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <Txt variant="caption" dim>
-                ESTIMATED DUE
+                {zakat.payable ? 'DUE NOW' : 'WOULD BE DUE'}
               </Txt>
               <Amount variant="title" tone={color.mustard}>
                 {zakat.due === null ? '—' : money(zakat.due)}
               </Amount>
             </Row>
+
+            {zakat.payable && (
+              <Button
+                label="Mark zakat paid"
+                full
+                style={{ marginTop: space.md }}
+                onPress={() => {
+                  updateSettings(settleZakat(data));
+                  say('Recorded. The next year begins from today, sir.', { mood: 'happy' });
+                }}
+              />
+            )}
+
             <Txt variant="micro" faint style={{ marginTop: space.md, lineHeight: 16 }}>
               Estimate based on logged balances only. Excludes gold, property, business assets and
-              debts owed. Zakat falls due after a full lunar year (hawl). Confirm with a scholar.
+              debts owed. The hawl resets if your wealth falls below the nisab. Confirm with a
+              scholar.
             </Txt>
           </Card>
         </>

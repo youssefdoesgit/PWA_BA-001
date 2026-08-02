@@ -4,11 +4,13 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Keypad } from '@/components/ui/keypad';
-import { Rise } from '@/components/ui/motion';
+import { notify } from '@/components/ui/press';
 import { Button, Row, Txt } from '@/components/ui/primitives';
+import { bricOnEdit, bricOnLog } from '@/lib/bric';
 import { byCode } from '@/lib/currency';
 import { DAY, shortDate, startOfDay } from '@/lib/date';
 import { parseAmount } from '@/lib/money';
+import { useSession } from '@/lib/session';
 import { useData, useStore } from '@/lib/store';
 import type { TxKind } from '@/lib/types';
 import { color, radius, space } from '@/theme/tokens';
@@ -16,18 +18,26 @@ import { color, radius, space } from '@/theme/tokens';
 export default function AddTransaction() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ category?: string }>();
+  const params = useLocalSearchParams<{ category?: string; id?: string }>();
 
   const data = useData();
   const addTransaction = useStore((s) => s.addTransaction);
-  const { currency } = data.settings;
+  const updateTransaction = useStore((s) => s.updateTransaction);
+  const removeTransaction = useStore((s) => s.removeTransaction);
+  const say = useSession((s) => s.say);
+  const { currency, name } = data.settings;
 
+  // Editing an existing entry rather than creating one.
+  const editing = data.transactions.find((t) => t.id === params.id);
   const preset = data.categories.find((c) => c.id === params.category);
-  const [kind, setKind] = useState<TxKind>(preset?.kind ?? 'expense');
-  const [raw, setRaw] = useState('');
-  const [categoryId, setCategoryId] = useState<string | undefined>(preset?.id);
-  const [date, setDate] = useState(() => startOfDay(Date.now()));
-  const [note, setNote] = useState('');
+
+  const [kind, setKind] = useState<TxKind>(editing?.kind ?? preset?.kind ?? 'expense');
+  const [raw, setRaw] = useState(editing ? String(editing.amount / 100) : '');
+  const [categoryId, setCategoryId] = useState<string | undefined>(
+    editing?.categoryId ?? preset?.id
+  );
+  const [date, setDate] = useState(() => editing?.date ?? startOfDay(Date.now()));
+  const [note, setNote] = useState(editing?.note ?? '');
 
   const cents = parseAmount(raw);
   const cats = useMemo(
@@ -40,13 +50,37 @@ export default function AddTransaction() {
 
   function save() {
     if (!canSave) return;
-    addTransaction({
-      kind,
-      amount: cents,
-      categoryId,
-      note: note.trim() || undefined,
-      date,
-    });
+
+    if (editing) {
+      // Snapshot the old values so the undo can put them back exactly.
+      const before = { ...editing };
+      updateTransaction(editing.id, {
+        kind,
+        amount: cents,
+        categoryId,
+        note: note.trim() || undefined,
+        date,
+      });
+      notify('success');
+      say(bricOnEdit(), {
+        mood: 'idle',
+        undo: () => updateTransaction(before.id, before),
+      });
+    } else {
+      const id = addTransaction({
+        kind,
+        amount: cents,
+        categoryId,
+        note: note.trim() || undefined,
+        date,
+      });
+      notify('success');
+      say(bricOnLog(kind, cents, name), {
+        mood: kind === 'income' ? 'happy' : 'idle',
+        undo: () => removeTransaction(id),
+      });
+    }
+
     router.back();
   }
 
@@ -54,13 +88,34 @@ export default function AddTransaction() {
     <View style={[s.root, { paddingTop: insets.top + space.md }]}>
       <Row style={{ justifyContent: 'space-between', marginBottom: space.md }}>
         <Txt variant="lead" weight="bold" spaced>
-          NEW ENTRY
+          {editing ? 'EDIT ENTRY' : 'NEW ENTRY'}
         </Txt>
-        <Pressable onPress={() => router.back()} hitSlop={14}>
-          <Txt variant="lead" dim>
-            ✕
-          </Txt>
-        </Pressable>
+        <Row style={{ gap: space.lg }}>
+          {editing && (
+            <Pressable
+              hitSlop={14}
+              onPress={() => {
+                const before = { ...editing };
+                removeTransaction(editing.id);
+                notify('warning');
+                say('Deleted.', {
+                  mood: 'warn',
+                  undo: () =>
+                    useStore.setState((st) => ({ transactions: [before, ...st.transactions] })),
+                });
+                router.back();
+              }}>
+              <Txt variant="caption" weight="bold" tone={color.danger}>
+                DELETE
+              </Txt>
+            </Pressable>
+          )}
+          <Pressable onPress={() => router.back()} hitSlop={14}>
+            <Txt variant="lead" dim>
+              ✕
+            </Txt>
+          </Pressable>
+        </Row>
       </Row>
 
       {/* Direction */}
@@ -115,7 +170,7 @@ export default function AddTransaction() {
         })}
       </ScrollView>
 
-      {/* When + note */}
+      {/* When */}
       <Row style={{ gap: space.sm, marginBottom: space.sm }}>
         {(
           [
@@ -151,7 +206,7 @@ export default function AddTransaction() {
       <View style={{ marginTop: 'auto', paddingBottom: insets.bottom + space.md }}>
         <Keypad value={raw} onChange={setRaw} />
         <Button
-          label={canSave ? 'Save' : 'Enter an amount'}
+          label={canSave ? (editing ? 'Save changes' : 'Save') : 'Enter an amount'}
           full
           disabled={!canSave}
           onPress={save}
@@ -203,7 +258,7 @@ const s = StyleSheet.create({
     borderColor: color.border,
     paddingHorizontal: space.md,
     color: color.text,
-    fontSize: 14,
+    fontSize: 16,
     marginBottom: space.sm,
   },
 });

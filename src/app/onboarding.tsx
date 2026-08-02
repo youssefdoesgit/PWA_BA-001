@@ -203,7 +203,7 @@ const s = StyleSheet.create({
     borderColor: color.border,
     paddingHorizontal: space.md,
     color: color.text,
-    fontSize: 17,
+    fontSize: 18,
   },
   symbol: {
     width: 50,
