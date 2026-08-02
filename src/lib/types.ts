@@ -1,8 +1,23 @@
-/** KEVLAR domain model. One person, one balance, nothing leaves the device. */
+/** KEVLAR domain model. One person, one balance, encrypted before it travels. */
 
 export type TxKind = 'expense' | 'income';
 
-export type Category = {
+/**
+ * Fields every syncable record carries.
+ *
+ * `deletedAt` is a tombstone rather than an actual removal: without it, a
+ * delete on one device would be undone the next time the other device merged
+ * its copy back in. Tombstoned records are filtered out by `useData`, so no
+ * screen ever has to think about them.
+ */
+export type Tracked = {
+  /** Last local change, used to resolve conflicts on merge. */
+  updatedAt: number;
+  /** Set instead of deleting, so the deletion itself can propagate. */
+  deletedAt?: number;
+};
+
+export type Category = Tracked & {
   id: string;
   name: string;
   /** Emoji, so it renders identically on web and iOS with zero assets. */
@@ -12,7 +27,7 @@ export type Category = {
   archived: boolean;
 };
 
-export type Transaction = {
+export type Transaction = Tracked & {
   id: string;
   kind: TxKind;
   /** Always positive. `kind` carries the direction. */
@@ -24,14 +39,14 @@ export type Transaction = {
   createdAt: number;
 };
 
-export type Budget = {
+export type Budget = Tracked & {
   id: string;
   categoryId: string;
   /** Cap per budget month. */
   limit: number;
 };
 
-export type Goal = {
+export type Goal = Tracked & {
   id: string;
   name: string;
   icon: string;
@@ -43,7 +58,7 @@ export type Goal = {
 
 export type RecurrenceUnit = 'week' | 'month' | 'year';
 
-export type Recurring = {
+export type Recurring = Tracked & {
   id: string;
   name: string;
   amount: number;
@@ -91,6 +106,17 @@ export type Settings = {
   lastStatementFor?: number;
 
   lastBackupAt?: number;
+
+  /* --- Sync ------------------------------------------------------------- */
+
+  /** Last local change to settings, so a merge can pick the newer side. */
+  settingsUpdatedAt?: number;
+  /** Where the encrypted blob lives. Stored locally, never committed. */
+  syncUrl?: string;
+  syncKey?: string;
+  /** Proves a passphrase is the right one without a round trip. */
+  passphraseCheck?: string;
+  syncedAt?: number;
 };
 
 export type KevlarData = {

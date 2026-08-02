@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { swatch } from '@/theme/tokens';
 import { addMonths, advance, endOfBudgetMonth, startOfBudgetMonth } from './date';
+import { alive } from './merge';
 import type {
   Budget,
   Category,
@@ -47,6 +48,7 @@ const seedCategories = (): Category[] =>
     kind,
     color: swatch[i % swatch.length],
     archived: false,
+    updatedAt: Date.now(),
   }));
 
 const seedSettings = (): Settings => ({
@@ -76,21 +78,21 @@ const emptyData = (): KevlarData => ({
 /* -------------------------------------------------------------------------- */
 
 type Actions = {
-  addTransaction: (t: Omit<Transaction, 'id' | 'createdAt'>) => string;
+  addTransaction: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => string;
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
   removeTransaction: (id: string) => void;
 
-  addCategory: (c: Omit<Category, 'id' | 'archived'>) => string;
+  addCategory: (c: Omit<Category, 'id' | 'archived' | 'updatedAt'>) => string;
   removeCategory: (id: string) => void;
 
   setBudget: (categoryId: string, limit: number) => void;
   removeBudget: (id: string) => void;
 
-  addGoal: (g: Omit<Goal, 'id' | 'createdAt' | 'saved'>) => string;
+  addGoal: (g: Omit<Goal, 'id' | 'createdAt' | 'saved' | 'updatedAt'>) => string;
   contributeToGoal: (id: string, cents: number) => void;
   removeGoal: (id: string) => void;
 
-  addRecurring: (r: Omit<Recurring, 'id' | 'active'>) => string;
+  addRecurring: (r: Omit<Recurring, 'id' | 'active' | 'updatedAt'>) => string;
   removeRecurring: (id: string) => void;
   /** Logs the bill as a real transaction and rolls `nextDue` forward. */
   payRecurring: (id: string) => void;
@@ -116,27 +118,37 @@ export const useStore = create<KevlarStore>()(
       addTransaction: (t) => {
         const id = uid();
         set((s) => ({
-          transactions: [{ ...t, id, createdAt: Date.now() }, ...s.transactions],
+          transactions: [{ ...t, id, createdAt: Date.now(), updatedAt: Date.now() }, ...s.transactions],
         }));
         return id;
       },
       updateTransaction: (id, patch) =>
         set((s) => ({
-          transactions: s.transactions.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+          transactions: s.transactions.map((t) =>
+            t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t
+          ),
         })),
       removeTransaction: (id) =>
-        set((s) => ({ transactions: s.transactions.filter((t) => t.id !== id) })),
+        set((s) => ({
+          transactions: s.transactions.map((t) =>
+            t.id === id ? { ...t, deletedAt: Date.now(), updatedAt: Date.now() } : t
+          ),
+        })),
 
       addCategory: (c) => {
         const id = uid();
-        set((s) => ({ categories: [...s.categories, { ...c, id, archived: false }] }));
+        set((s) => ({ categories: [...s.categories, { ...c, id, archived: false, updatedAt: Date.now() }] }));
         return id;
       },
       removeCategory: (id) =>
         set((s) => ({
           // Archive rather than delete, so history stays readable.
-          categories: s.categories.map((c) => (c.id === id ? { ...c, archived: true } : c)),
-          budgets: s.budgets.filter((b) => b.categoryId !== id),
+          categories: s.categories.map((c) =>
+            c.id === id ? { ...c, archived: true, updatedAt: Date.now() } : c
+          ),
+          budgets: s.budgets.map((b) =>
+            b.categoryId === id ? { ...b, deletedAt: Date.now(), updatedAt: Date.now() } : b
+          ),
         })),
 
       setBudget: (categoryId, limit) =>
@@ -144,33 +156,46 @@ export const useStore = create<KevlarStore>()(
           const existing = s.budgets.find((b) => b.categoryId === categoryId);
           if (existing) {
             return {
-              budgets: s.budgets.map((b) => (b.categoryId === categoryId ? { ...b, limit } : b)),
+              budgets: s.budgets.map((b) => (b.categoryId === categoryId ? { ...b, limit, updatedAt: Date.now() } : b)),
             };
           }
-          return { budgets: [...s.budgets, { id: uid(), categoryId, limit }] };
+          return { budgets: [...s.budgets, { id: uid(), categoryId, limit, updatedAt: Date.now() }] };
         }),
-      removeBudget: (id) => set((s) => ({ budgets: s.budgets.filter((b) => b.id !== id) })),
+      removeBudget: (id) => set((s) => ({
+          budgets: s.budgets.map((b) =>
+            b.id === id ? { ...b, deletedAt: Date.now(), updatedAt: Date.now() } : b
+          ),
+        })),
 
       addGoal: (g) => {
         const id = uid();
-        set((s) => ({ goals: [...s.goals, { ...g, id, saved: 0, createdAt: Date.now() }] }));
+        set((s) => ({ goals: [...s.goals, { ...g, id, saved: 0, createdAt: Date.now(), updatedAt: Date.now() }] }));
         return id;
       },
       contributeToGoal: (id, cents) =>
         set((s) => ({
           goals: s.goals.map((g) =>
-            g.id === id ? { ...g, saved: Math.max(0, g.saved + cents) } : g
+            g.id === id ? { ...g, saved: Math.max(0, g.saved + cents), updatedAt: Date.now() } : g
           ),
         })),
-      removeGoal: (id) => set((s) => ({ goals: s.goals.filter((g) => g.id !== id) })),
+      removeGoal: (id) =>
+        set((s) => ({
+          goals: s.goals.map((g) =>
+            g.id === id ? { ...g, deletedAt: Date.now(), updatedAt: Date.now() } : g
+          ),
+        })),
 
       addRecurring: (r) => {
         const id = uid();
-        set((s) => ({ recurring: [...s.recurring, { ...r, id, active: true }] }));
+        set((s) => ({ recurring: [...s.recurring, { ...r, id, active: true, updatedAt: Date.now() }] }));
         return id;
       },
       removeRecurring: (id) =>
-        set((s) => ({ recurring: s.recurring.filter((r) => r.id !== id) })),
+        set((s) => ({
+          recurring: s.recurring.map((r) =>
+            r.id === id ? { ...r, deletedAt: Date.now(), updatedAt: Date.now() } : r
+          ),
+        })),
       payRecurring: (id) => {
         const bill = get().recurring.find((r) => r.id === id);
         if (!bill) return;
@@ -183,12 +208,15 @@ export const useStore = create<KevlarStore>()(
         });
         set((s) => ({
           recurring: s.recurring.map((r) =>
-            r.id === id ? { ...r, nextDue: advance(r.nextDue, r.every, r.unit) } : r
+            r.id === id
+              ? { ...r, nextDue: advance(r.nextDue, r.every, r.unit), updatedAt: Date.now() }
+              : r
           ),
         }));
       },
 
-      updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+      updateSettings: (patch) =>
+        set((s) => ({ settings: { ...s.settings, ...patch, settingsUpdatedAt: Date.now() } })),
       replaceAll: (data) => set({ ...data }),
       resetAll: () => set({ ...emptyData() }),
 
@@ -249,7 +277,7 @@ export const useStore = create<KevlarStore>()(
             guard += 1;
           }
           set((s) => ({
-            recurring: s.recurring.map((r) => (r.id === bill.id ? { ...r, nextDue: cursor } : r)),
+            recurring: s.recurring.map((r) => (r.id === bill.id ? { ...r, nextDue: cursor, updatedAt: Date.now() } : r)),
           }));
         }
         return due.length;
@@ -301,8 +329,17 @@ export function useData(): KevlarData {
   const recurring = useStore((s) => s.recurring);
   const settings = useStore((s) => s.settings);
 
+  // Screens never see tombstones; they exist purely so deletions can travel.
   return useMemo(
-    () => ({ version, categories, transactions, budgets, goals, recurring, settings }),
+    () => ({
+      version,
+      categories: alive(categories),
+      transactions: alive(transactions),
+      budgets: alive(budgets),
+      goals: alive(goals),
+      recurring: alive(recurring),
+      settings,
+    }),
     [version, categories, transactions, budgets, goals, recurring, settings]
   );
 }

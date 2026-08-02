@@ -47,6 +47,7 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" options={{ animation: 'none' }} />
             <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="statement" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="sync" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen
               name="add"
               options={{ presentation: 'modal', animation: 'slide_from_bottom' }}

@@ -381,6 +381,32 @@ export default function Settings() {
         </Card>
       </Rise>
 
+      {/* Sync */}
+      <Rise delay={290}>
+        <SectionTitle>Sync</SectionTitle>
+        <Card>
+          <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1, marginRight: space.md }}>
+              <Txt variant="body" weight="bold">
+                Encrypted sync
+              </Txt>
+              <Txt variant="micro" faint style={{ marginTop: 2, lineHeight: 16 }}>
+                {settings.syncUrl
+                  ? settings.syncedAt
+                    ? `Last synced ${new Date(settings.syncedAt).toLocaleDateString()}`
+                    : 'Connected, never synced'
+                  : 'Keep this device and your phone in step'}
+              </Txt>
+            </View>
+            <Pressable hitSlop={8} onPress={() => router.push('/sync')}>
+              <Txt variant="caption" weight="bold" spaced tone={color.accent}>
+                OPEN
+              </Txt>
+            </Pressable>
+          </Row>
+        </Card>
+      </Rise>
+
       {/* Tour */}
       <Rise delay={300}>
         <SectionTitle>Orientation</SectionTitle>
