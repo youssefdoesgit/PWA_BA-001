@@ -58,6 +58,7 @@ const seedSettings = (): Settings => ({
   monthStartDay: 1,
   onboarded: false,
   tourDone: false,
+  lockEnabled: false,
   rateOverrides: {},
   travelCurrencies: ['USD', 'EUR', 'GBP', 'TND', 'AED', 'JPY'],
   islamicMode: true,

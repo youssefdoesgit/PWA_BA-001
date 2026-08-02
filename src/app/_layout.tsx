@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppTick } from '@/components/app-tick';
 import { BricBar, UpdateBanner } from '@/components/bric-bar';
+import { LockGate } from '@/components/lock-gate';
 import { Tour } from '@/components/tour';
 import { useStore } from '@/lib/store';
 import { color } from '@/theme/tokens';
@@ -57,6 +58,7 @@ export default function RootLayout() {
           <BricBar />
           <UpdateBanner />
           <Tour />
+          <LockGate />
         </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>

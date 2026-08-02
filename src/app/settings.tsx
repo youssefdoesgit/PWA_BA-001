@@ -11,6 +11,8 @@ import { Button, Card, Row, Screen, SectionTitle, Txt } from '@/components/ui/pr
 import { CURRENCIES, byCode } from '@/lib/currency';
 import { parseAmount } from '@/lib/money';
 import { bricOnRestore } from '@/lib/bric';
+import { fingerprint } from '@/lib/crypto';
+import { checkPassphrase, enrolPasskey, forgetPasskey, hasPasskey } from '@/lib/lock';
 import { useSession } from '@/lib/session';
 import { useData, useStore } from '@/lib/store';
 import type { KevlarData } from '@/lib/types';
@@ -32,6 +34,10 @@ export default function Settings() {
 
   // Erase is a two-stage action: reveal, then prove it's really you.
   const [armed, setArmed] = useState(false);
+  const [lockPhrase, setLockPhrase] = useState('');
+  const [passkeyOn, setPasskeyOn] = useState(hasPasskey());
+  const [arming, setArming] = useState(false);
+  const [confirmPhrase, setConfirmPhrase] = useState('');
   const [typed, setTyped] = useState('');
 
   const activeCats = data.categories.filter((c) => !c.archived);
@@ -381,6 +387,147 @@ export default function Settings() {
         </Card>
       </Rise>
 
+      {/* Lock */}
+      <Rise delay={250}>
+        <SectionTitle>Access</SectionTitle>
+        <Card>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, marginRight: space.md }}>
+              <Txt variant="body" weight="bold">
+                Lock KEVLAR
+              </Txt>
+              <Txt variant="micro" faint style={{ marginTop: 2, lineHeight: 16 }}>
+                {settings.passphraseCheck
+                  ? 'Asks for your passphrase, or Face ID, every launch.'
+                  : 'Set a passphrase below before this can be switched on.'}
+              </Txt>
+            </View>
+            <Switch
+              value={settings.lockEnabled}
+              disabled={!settings.passphraseCheck}
+              onValueChange={(v) => {
+                // Turning it off is safe. Turning it on is not, until the
+                // passphrase has been proven against the stored fingerprint —
+                // otherwise a bad fingerprint locks you out of your own data
+                // with no way back in on a phone.
+                if (!v) {
+                  updateSettings({ lockEnabled: false });
+                  setArming(false);
+                  return;
+                }
+                setArming(true);
+                setStatus(null);
+              }}
+              trackColor={{ true: color.accentDim, false: color.surfacePress }}
+              thumbColor={settings.lockEnabled ? color.accent : color.textFaint}
+            />
+          </Row>
+
+          {arming && !settings.lockEnabled && (
+            <>
+              <Txt variant="micro" faint style={{ marginTop: space.lg, marginBottom: space.sm }}>
+                CONFIRM YOUR PASSPHRASE TO ARM THE LOCK
+              </Txt>
+              <TextInput
+                value={confirmPhrase}
+                onChangeText={setConfirmPhrase}
+                placeholder="Passphrase"
+                placeholderTextColor={color.textFaint}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={s.input}
+              />
+              <Row style={{ gap: space.sm, marginTop: space.sm }}>
+                <Button
+                  label="Cancel"
+                  kind="ghost"
+                  style={{ flex: 1 }}
+                  onPress={() => {
+                    setArming(false);
+                    setConfirmPhrase('');
+                  }}
+                />
+                <Button
+                  label="Arm lock"
+                  style={{ flex: 1 }}
+                  onPress={async () => {
+                    const ok = await checkPassphrase(confirmPhrase, settings.passphraseCheck);
+                    if (!ok) {
+                      setStatus('That does not match. Lock not enabled.');
+                      return;
+                    }
+                    updateSettings({ lockEnabled: true });
+                    setArming(false);
+                    setConfirmPhrase('');
+                    setStatus('Lock armed.');
+                  }}
+                />
+              </Row>
+            </>
+          )}
+
+          {!settings.passphraseCheck && (
+            <>
+              <Txt variant="micro" faint style={{ marginTop: space.lg, marginBottom: space.sm }}>
+                SET A PASSPHRASE
+              </Txt>
+              <TextInput
+                value={lockPhrase}
+                onChangeText={setLockPhrase}
+                placeholder="Same one you use for sync"
+                placeholderTextColor={color.textFaint}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={s.input}
+              />
+              <Button
+                label="Save passphrase"
+                kind="ghost"
+                full
+                style={{ marginTop: space.sm }}
+                onPress={async () => {
+                  const v = lockPhrase.trim();
+                  if (v.length < 6) {
+                    setStatus('Use at least six characters.');
+                    return;
+                  }
+                  updateSettings({ passphrase: v, passphraseCheck: await fingerprint(v) });
+                  setLockPhrase('');
+                  setStatus('Passphrase set.');
+                }}
+              />
+            </>
+          )}
+
+          <Button
+            label={passkeyOn ? 'Re-enrol Face ID' : 'Enable Face ID'}
+            kind="ghost"
+            full
+            style={{ marginTop: space.md }}
+            onPress={async () => {
+              const res = await enrolPasskey(settings.name || 'KEVLAR');
+              setPasskeyOn(hasPasskey());
+              setStatus(res.ok ? 'Face ID enrolled.' : (res.error ?? 'Could not enrol.'));
+            }}
+          />
+          {passkeyOn && (
+            <Pressable
+              style={{ marginTop: space.md, alignItems: 'center' }}
+              onPress={() => {
+                forgetPasskey();
+                setPasskeyOn(false);
+                setStatus('Face ID removed.');
+              }}>
+              <Txt variant="micro" spaced faint>
+                REMOVE FACE ID
+              </Txt>
+            </Pressable>
+          )}
+        </Card>
+      </Rise>
+
       {/* Sync */}
       <Rise delay={290}>
         <SectionTitle>Sync</SectionTitle>
@@ -439,8 +586,9 @@ export default function Settings() {
         <SectionTitle>Your data</SectionTitle>
         <Card>
           <Txt variant="caption" dim style={{ marginBottom: space.md, lineHeight: 19 }}>
-            Everything lives on this device — no servers, no account, no sync. That also means a
-            backup is the only copy.
+            Your ledger lives on this device. If sync is on, it also lives encrypted on your
+            server — unreadable without your passphrase. A backup is still the only copy you
+            control outright.
           </Txt>
           {settings.lastBackupAt && (
             <Txt variant="micro" faint style={{ marginBottom: space.md }}>

@@ -32,6 +32,10 @@ type Session = {
   setSyncing: (v: boolean) => void;
   lastSyncError: string | null;
   setLastSyncError: (v: string | null) => void;
+
+  /** Cleared on every cold start, so the lock is asked for each launch. */
+  unlocked: boolean;
+  setUnlocked: (v: boolean) => void;
 };
 
 let counter = 0;
@@ -51,4 +55,7 @@ export const useSession = create<Session>()((set) => ({
   setSyncing: (v) => set({ syncing: v }),
   lastSyncError: null,
   setLastSyncError: (v) => set({ lastSyncError: v }),
+
+  unlocked: false,
+  setUnlocked: (v) => set({ unlocked: v }),
 }));

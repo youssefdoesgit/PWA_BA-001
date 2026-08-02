@@ -82,6 +82,8 @@ export type Settings = {
   onboarded: boolean;
   /** False until the in-app guided tour has been seen. */
   tourDone: boolean;
+  /** Requires the passphrase or a passkey on every launch. */
+  lockEnabled: boolean;
 
   /** User-corrected FX rates, expressed as units per USD. */
   rateOverrides: Record<string, number>;
