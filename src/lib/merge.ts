@@ -38,14 +38,22 @@ function mergeList<T extends WithId>(local: T[], remote: T[]): T[] {
 /** Never travels: how *this* device reaches the server is its own business. */
 const DEVICE_ONLY = ['syncUrl', 'syncKey', 'passphrase', 'passphraseCheck', 'syncedAt'] as const;
 
+/** Treats blank strings and undefined as "never actually set". */
+function isBlank(v: unknown): boolean {
+  return v === undefined || v === null || v === '';
+}
+
+/**
+ * Reconciles settings key by key.
+ *
+ * The ordering deliberately does NOT fall back to a whole-object timestamp.
+ * A freshly installed device stamps itself "now" during onboarding, so any
+ * coarse comparison hands it the win and its empty name overwrites a real
+ * ledger. Only an explicit per-field stamp counts as intent.
+ */
 function mergeSettings(local: Settings, remote: Settings): Settings {
   const lt = local.fieldTimes ?? {};
   const rt = remote.fieldTimes ?? {};
-
-  // Fall back to the coarse timestamp for anything written before per-field
-  // stamps existed, so older data still resolves sensibly.
-  const lFallback = local.settingsUpdatedAt ?? 0;
-  const rFallback = remote.settingsUpdatedAt ?? 0;
 
   const keys = new Set([...Object.keys(local), ...Object.keys(remote)]);
   const out = { ...local } as Record<string, unknown>;
@@ -54,22 +62,40 @@ function mergeSettings(local: Settings, remote: Settings): Settings {
     if ((DEVICE_ONLY as readonly string[]).includes(key)) continue;
     if (key === 'fieldTimes' || key === 'settingsUpdatedAt') continue;
 
-    const lTime = lt[key] ?? lFallback;
-    const rTime = rt[key] ?? rFallback;
-    // Ties go to remote so both devices converge on the same answer.
-    if (rTime >= lTime) out[key] = (remote as Record<string, unknown>)[key];
+    const lVal = (local as Record<string, unknown>)[key];
+    const rVal = (remote as Record<string, unknown>)[key];
+    const lTime = lt[key];
+    const rTime = rt[key];
+
+    // Both sides set it deliberately: newest wins, ties to remote so the two
+    // devices converge on the same answer rather than ping-ponging.
+    if (lTime !== undefined && rTime !== undefined) {
+      if (rTime >= lTime) out[key] = rVal;
+      continue;
+    }
+
+    // Only one side ever set it on purpose. That side wins outright.
+    if (rTime !== undefined && lTime === undefined) {
+      out[key] = rVal;
+      continue;
+    }
+    if (lTime !== undefined && rTime === undefined) continue;
+
+    // Neither was set explicitly — prefer whichever actually holds a value.
+    if (isBlank(lVal) && !isBlank(rVal)) out[key] = rVal;
   }
 
   for (const key of DEVICE_ONLY) {
     out[key] = (local as Record<string, unknown>)[key];
   }
 
-  out.fieldTimes = { ...rt, ...lt };
+  const times: Record<string, number> = { ...rt, ...lt };
   for (const key of keys) {
     const t = Math.max(lt[key] ?? 0, rt[key] ?? 0);
-    if (t) (out.fieldTimes as Record<string, number>)[key] = t;
+    if (t) times[key] = t;
   }
-  out.settingsUpdatedAt = Math.max(lFallback, rFallback);
+  out.fieldTimes = times;
+  out.settingsUpdatedAt = Math.max(local.settingsUpdatedAt ?? 0, remote.settingsUpdatedAt ?? 0);
 
   return out as Settings;
 }

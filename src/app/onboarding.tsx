@@ -91,13 +91,18 @@ export default function Onboarding() {
   if (!booted) return <Boot onDone={() => setBooted(true)} />;
 
   function begin() {
-    updateSettings({
-      name: name.trim(),
-      currency,
-      openingBalance: parseAmount(start),
+    // Only record what was actually filled in. Stamping a blank name here
+    // would mark it as a deliberate choice, and it would then beat a real
+    // name already synced from another device.
+    const patch: Parameters<typeof updateSettings>[0] = {
       onboarded: true,
       tourDone: false,
-    });
+    };
+    if (name.trim()) patch.name = name.trim();
+    if (start.trim()) patch.openingBalance = parseAmount(start);
+    if (currency !== 'USD') patch.currency = currency;
+
+    updateSettings(patch);
     router.replace('/');
   }
 
