@@ -19,10 +19,8 @@ export default function DeskLayout() {
           tabBarShowLabel: false,
           tabBarStyle: fnTabBarStyle(subsystem.desk),
         }}>
-        <Tabs.Screen name="index" options={key(1, 'BOARD')} />
-        <Tabs.Screen name="tracks" options={key(2, 'TRACKS')} />
-        <Tabs.Screen name="radar" options={key(3, 'RADAR')} />
-        <Tabs.Screen name="brief" options={key(4, 'BRIEF')} />
+        <Tabs.Screen name="index" options={key(1, 'NOTES')} />
+        <Tabs.Screen name="brief" options={key(2, 'BRIEF')} />
       </Tabs>
     </SubsystemFrame>
   );

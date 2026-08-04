@@ -6,7 +6,7 @@
  * merge pass — splitting them would mean two of everything for no benefit.
  *
  *   · BANKING — one person, one balance
- *   · DOCKET  — what he is chasing and when it is due
+ *   · DOCKET  — notes, with structure where structure helps
  */
 
 export type TxKind = 'expense' | 'income';
@@ -83,24 +83,7 @@ export type Recurring = Tracked & {
 /* DOCKET                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
- * A long-running area of effort — "Scholarships", "Unity", "Portfolio".
- *
- * Tracks exist so VANE can tell the difference between a quiet week and an
- * abandoned ambition. A task with no track is still valid; it just tells him
- * less.
- */
-export type Track = Tracked & {
-  id: string;
-  name: string;
-  icon: string;
-  color: string;
-  /** Drives which catalogue leads VANE considers relevant. */
-  field: LeadField;
-  createdAt: number;
-};
-
-/** Where a task sits. `blocked` is deliberately distinct from `open`: it means
+/** Where a note sits. `blocked` is deliberately distinct from `open`: it means
  *  waiting on someone else, which VANE should nag about differently. */
 export type TaskStatus = 'open' | 'active' | 'blocked' | 'done';
 
@@ -114,30 +97,31 @@ export type Step = {
   done: boolean;
 };
 
+/**
+ * One entry in the docket.
+ *
+ * Deliberately a note first and a task second: the body is the point, and
+ * everything else — a deadline, a checklist, a status — is optional structure
+ * for the entries that earn it.
+ */
 export type Task = Tracked & {
   id: string;
   title: string;
-  trackId?: string;
+  /** The note itself. Most entries are mostly this. */
+  notes?: string;
   status: TaskStatus;
   priority: Priority;
-  /** Epoch ms. Applications have hard deadlines; most other things do not. */
+  /** Epoch ms. Only the entries with a real deadline carry one. */
   due?: number;
-  /** Free-form working notes. The half of this that is a notebook. */
-  notes?: string;
   /**
-   * Ordered checklist. Merged as one value with the task rather than as
+   * Ordered checklist. Merged as one value with the note rather than as
    * records of their own — two devices editing the same checklist offline is
    * not a case worth carrying tombstones for.
    */
   steps: Step[];
-  /** Set when the task was raised from a catalogue lead, so it is not offered twice. */
-  leadId?: string;
   createdAt: number;
   completedAt?: number;
 };
-
-/** Broad areas the opportunity catalogue is filed under. */
-export type LeadField = 'gamedev' | 'scholarship' | 'learning' | 'competition' | 'personal';
 
 export type Settings = {
   /** What BRIC calls you. The only personal detail KEVLAR ever asks for. */
@@ -178,18 +162,6 @@ export type Settings = {
 
   lastBackupAt?: number;
 
-  /* --- Docket ----------------------------------------------------------- */
-
-  /**
-   * Catalogue leads he has waved off, by id.
-   *
-   * Merged as a union rather than last-write-wins: dismissing something on one
-   * device and something else on the other should keep both dismissals.
-   */
-  dismissedLeads?: string[];
-  /** False until VANE has walked him round the docket. Separate from `tourDone`. */
-  docketTourDone?: boolean;
-
   /* --- Sync ------------------------------------------------------------- */
 
   /** Last local change to settings, kept as a coarse fallback. */
@@ -225,7 +197,6 @@ export type KevlarData = {
   recurring: Recurring[];
 
   /* Docket */
-  tracks: Track[];
   tasks: Task[];
 
   settings: Settings;
@@ -233,7 +204,6 @@ export type KevlarData = {
 
 /** The docket's slice of the document, for screens that have no use for money. */
 export type DocketData = {
-  tracks: Track[];
   tasks: Task[];
   settings: Settings;
 };

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Vane } from '@/components/ui/agency';
 import { Rise, useTypewriter } from '@/components/ui/motion';
@@ -9,10 +9,10 @@ import { Card, Empty, Row, Rule, Screen, SectionTitle, Txt } from '@/components/
 import { DAY, dueLabel } from '@/lib/date';
 import { useSession } from '@/lib/session';
 import { isDone, openTasks, sortTasks, taskProgress, useDocket, useStore } from '@/lib/store';
-import { vaneBriefing, vaneOnDone, vaneOnUndo, weeklyRate } from '@/lib/vane';
+import { vaneBriefing, vaneOnAdd, vaneOnDone, vaneOnUndo, weeklyRate } from '@/lib/vane';
 import { color, glyph, radius, space, subsystem } from '@/theme/tokens';
 import type { BriefTone } from '@/lib/bric';
-import type { Task, Track } from '@/lib/types';
+import type { Task } from '@/lib/types';
 
 const TONE: Record<BriefTone, string> = {
   urgent: color.expense,
@@ -23,11 +23,11 @@ const TONE: Record<BriefTone, string> = {
 
 const PRIORITY_TONE = [color.border, color.mustard, color.expense];
 
-type Filter = 'all' | 'due' | 'active' | 'done';
+type Filter = 'all' | 'dated' | 'active' | 'done';
 
 const FILTERS: [Filter, string][] = [
   ['all', 'ALL'],
-  ['due', 'DATED'],
+  ['dated', 'DATED'],
   ['active', 'ACTIVE'],
   ['done', 'DONE'],
 ];
@@ -43,35 +43,31 @@ function DueBadge({ due }: { due: number }) {
   );
 }
 
-function TaskRow({
+function NoteRow({
   task,
-  track,
   onOpen,
   onToggle,
   first,
 }: {
   task: Task;
-  track?: Track;
   onOpen: () => void;
   onToggle: () => void;
   first: boolean;
 }) {
   const done = isDone(task);
-  const progress = taskProgress(task);
   const total = task.steps.length;
+  const progress = taskProgress(task);
+
+  // The body is the point of the entry, so a couple of lines of it belong on
+  // the list itself — otherwise this reads as a checklist rather than notes.
+  const preview = task.notes?.trim().replace(/\s+/g, ' ');
 
   return (
-    <Row
-      style={[s.row, first ? null : { borderTopWidth: 1, borderTopColor: color.border }]}>
-      {/* Priority runs down the left edge — readable without occupying a word. */}
+    <Row style={[s.row, first ? null : { borderTopWidth: 1, borderTopColor: color.border }]}>
       <View style={[s.priority, { backgroundColor: PRIORITY_TONE[task.priority] }]} />
 
       <Pressable hitSlop={10} onPress={onToggle} style={{ padding: 2 }}>
-        <View
-          style={[
-            s.box,
-            done && { backgroundColor: subsystem.desk, borderColor: subsystem.desk },
-          ]}>
+        <View style={[s.box, done && { backgroundColor: subsystem.desk, borderColor: subsystem.desk }]}>
           {done && (
             <Txt variant="micro" weight="bold" tone={color.accentText}>
               ✓
@@ -90,12 +86,13 @@ function TaskRow({
           {task.title}
         </Txt>
 
-        <Row style={{ gap: space.sm, marginTop: 3, flexWrap: 'wrap' }}>
-          {track && (
-            <Txt variant="micro" tone={track.color}>
-              {`${track.icon} ${track.name.toUpperCase()}`}
-            </Txt>
-          )}
+        {preview ? (
+          <Txt variant="micro" faint numberOfLines={2} style={{ marginTop: 3, lineHeight: 16 }}>
+            {preview}
+          </Txt>
+        ) : null}
+
+        <Row style={{ gap: space.sm, marginTop: 4, flexWrap: 'wrap' }}>
           {task.status === 'blocked' && (
             <Txt variant="micro" weight="bold" tone={color.warn}>
               BLOCKED
@@ -122,47 +119,63 @@ function TaskRow({
   );
 }
 
-export default function Board() {
+export default function Docket() {
   const router = useRouter();
   const docket = useDocket();
   const toggleTask = useStore((s) => s.toggleTask);
+  const addTask = useStore((s) => s.addTask);
+  const removeTask = useStore((s) => s.removeTask);
   const say = useSession((s) => s.say);
 
   const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const [draft, setDraft] = useState('');
 
   const brief = vaneBriefing(docket);
   const greeting = useTypewriter(brief.greeting, 74);
 
-  const trackById = useMemo(
-    () => new Map(docket.tracks.map((t) => [t.id, t])),
-    [docket.tracks]
-  );
-
   const visible = useMemo(() => {
     const open = openTasks(docket);
-    switch (filter) {
-      case 'due':
-        return sortTasks(open.filter((t) => t.due !== undefined));
-      case 'active':
-        return sortTasks(open.filter((t) => t.status === 'active'));
-      case 'done':
-        // Newest first, and capped — the board is for what is ahead of him.
-        return docket.tasks
-          .filter(isDone)
-          .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))
-          .slice(0, 25);
-      default:
-        return sortTasks(open);
-    }
-  }, [docket, filter]);
+    const base =
+      filter === 'dated'
+        ? sortTasks(open.filter((t) => t.due !== undefined))
+        : filter === 'active'
+          ? sortTasks(open.filter((t) => t.status === 'active'))
+          : filter === 'done'
+            ? docket.tasks
+                .filter(isDone)
+                .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))
+                .slice(0, 25)
+            : sortTasks(open);
+
+    const q = query.trim().toLowerCase();
+    if (!q) return base;
+    // Search the body too — the whole point of writing it down is finding it.
+    return base.filter(
+      (t) =>
+        t.title.toLowerCase().includes(q) ||
+        (t.notes ?? '').toLowerCase().includes(q) ||
+        t.steps.some((st) => st.text.toLowerCase().includes(q))
+    );
+  }, [docket, filter, query]);
+
+  /** Jot a title straight from the list, then open it if it needs a body. */
+  function quickAdd() {
+    const title = draft.trim();
+    if (!title) return;
+    const id = addTask({ title });
+    setDraft('');
+    notify('success');
+    say(vaneOnAdd(title, false), { mood: 'idle', undo: () => removeTask(id) });
+  }
 
   function flip(task: Task) {
     toggleTask(task.id);
     notify(isDone(task) ? 'warning' : 'success');
-    say(
-      isDone(task) ? vaneOnUndo(task.title) : vaneOnDone(task.title, weeklyRate(docket) + 1),
-      { mood: isDone(task) ? 'idle' : 'happy', undo: () => toggleTask(task.id) }
-    );
+    say(isDone(task) ? vaneOnUndo(task.title) : vaneOnDone(task.title, weeklyRate(docket) + 1), {
+      mood: isDone(task) ? 'idle' : 'happy',
+      undo: () => toggleTask(task.id),
+    });
   }
 
   return (
@@ -203,9 +216,29 @@ export default function Board() {
           </Card>
         </Rise>
 
-        <Rise delay={60}>
-          <SectionTitle>Board</SectionTitle>
-          <Row style={{ gap: space.sm, marginBottom: space.sm }}>
+        {/* Jotting something down should never cost more than one tap. */}
+        <Rise delay={50}>
+          <Row style={{ gap: space.sm, marginTop: space.lg }}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Write something down"
+              placeholderTextColor={color.textFaint}
+              style={s.quick}
+              returnKeyType="done"
+              onSubmitEditing={quickAdd}
+            />
+            <Pressable onPress={quickAdd} style={s.quickAdd} hitSlop={6}>
+              <Txt variant="lead" weight="bold" tone={subsystem.desk}>
+                +
+              </Txt>
+            </Pressable>
+          </Row>
+        </Rise>
+
+        <Rise delay={90}>
+          <SectionTitle>Docket</SectionTitle>
+          <Row style={{ gap: space.sm, marginBottom: space.sm, flexWrap: 'wrap' }}>
             {FILTERS.map(([value, label]) => {
               const active = value === filter;
               return (
@@ -230,26 +263,42 @@ export default function Board() {
               );
             })}
           </Row>
+
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search titles, notes and steps"
+            placeholderTextColor={color.textFaint}
+            style={s.search}
+            returnKeyType="search"
+          />
         </Rise>
 
-        <Rise delay={110}>
+        <Rise delay={130}>
           {visible.length === 0 ? (
             <Empty
               icon="▤"
-              title={filter === 'done' ? 'Nothing closed yet' : 'Board is clear'}
+              title={
+                query.trim()
+                  ? 'Nothing matches'
+                  : filter === 'done'
+                    ? 'Nothing closed yet'
+                    : 'Docket is empty'
+              }
               body={
-                filter === 'done'
-                  ? 'Finished items collect here so you can see the rate you are actually moving at.'
-                  : 'Add something with the + button, or open RADAR and let VANE suggest what is worth chasing.'
+                query.trim()
+                  ? 'Searching titles, bodies and checklist steps. Try a shorter word.'
+                  : filter === 'done'
+                    ? 'Finished entries collect here so you can see the rate you are actually moving at.'
+                    : 'Write anything in the box above. A deadline and a checklist are optional — most things are just notes.'
               }
             />
           ) : (
             <Card style={{ padding: 0 }}>
               {visible.map((task, i) => (
-                <TaskRow
+                <NoteRow
                   key={task.id}
                   task={task}
-                  track={task.trackId ? trackById.get(task.trackId) : undefined}
                   first={i === 0}
                   onOpen={() => router.push({ pathname: '/task', params: { id: task.id } })}
                   onToggle={() => flip(task)}
@@ -272,6 +321,38 @@ export default function Board() {
 const s = StyleSheet.create({
   briefRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.sm },
   dot: { width: 7, height: 7, borderRadius: 4 },
+  quick: {
+    flex: 1,
+    height: 46,
+    borderRadius: radius.md,
+    backgroundColor: color.surface,
+    borderWidth: 1,
+    borderColor: color.borderHi,
+    paddingHorizontal: space.md,
+    color: color.text,
+    fontSize: 16,
+  },
+  quickAdd: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: color.borderHi,
+    borderRadius: radius.md,
+    backgroundColor: color.surface,
+  },
+  search: {
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: color.surface,
+    borderWidth: 1,
+    borderColor: color.border,
+    paddingHorizontal: space.md,
+    color: color.text,
+    fontSize: 15,
+    marginBottom: space.sm,
+  },
   filter: {
     paddingHorizontal: space.md,
     height: 30,
@@ -281,7 +362,7 @@ const s = StyleSheet.create({
     borderColor: color.border,
     backgroundColor: color.surface,
   },
-  row: { alignItems: 'center', paddingVertical: space.md, paddingRight: space.md, paddingLeft: 0 },
+  row: { alignItems: 'flex-start', paddingVertical: space.md, paddingRight: space.md, paddingLeft: 0 },
   priority: { width: 3, alignSelf: 'stretch', marginRight: space.md },
   box: {
     width: 20,

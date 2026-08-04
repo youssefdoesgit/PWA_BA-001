@@ -7,7 +7,6 @@ import { FieldLabel } from '@/components/ui/agency';
 import { notify } from '@/components/ui/press';
 import { Button, Row, Rule, Txt } from '@/components/ui/primitives';
 import { DAY, shortDate, startOfDay } from '@/lib/date';
-import { leadById } from '@/lib/leads';
 import { useSession } from '@/lib/session';
 import { useDocket, useStore } from '@/lib/store';
 import { vaneOnAdd, vaneOnDone, weeklyRate } from '@/lib/vane';
@@ -39,10 +38,10 @@ const DUE_PRESETS: [string, number | null][] = [
   ['+1M', 30],
 ];
 
-export default function TaskEditor() {
+export default function NoteEditor() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string; track?: string; lead?: string }>();
+  const params = useLocalSearchParams<{ id?: string }>();
 
   const docket = useDocket();
   const addTask = useStore((s) => s.addTask);
@@ -51,23 +50,13 @@ export default function TaskEditor() {
   const say = useSession((s) => s.say);
 
   const editing = docket.tasks.find((t) => t.id === params.id);
-  // Raising a catalogue lead pre-fills the title and the checklist, so the
-  // first thing he sees is a plan rather than an empty box.
-  const lead = params.lead ? leadById(params.lead) : undefined;
 
-  const [title, setTitle] = useState(editing?.title ?? lead?.name ?? '');
-  const [trackId, setTrackId] = useState<string | undefined>(
-    editing?.trackId ?? params.track ?? docket.tracks.find((t) => t.field === lead?.field)?.id
-  );
+  const [title, setTitle] = useState(editing?.title ?? '');
+  const [notes, setNotes] = useState(editing?.notes ?? '');
   const [status, setStatus] = useState<TaskStatus>(editing?.status ?? 'open');
   const [priority, setPriority] = useState<Priority>(editing?.priority ?? 0);
   const [due, setDue] = useState<number | undefined>(editing?.due);
-  const [notes, setNotes] = useState(
-    editing?.notes ?? (lead ? `${lead.what}\n\nWindow: ${lead.windowNote}\nEligibility: ${lead.eligibility}\nSearch: ${lead.search}` : '')
-  );
-  const [steps, setSteps] = useState<Step[]>(
-    editing?.steps ?? (lead?.steps ?? []).map((text) => ({ id: uid(), text, done: false }))
-  );
+  const [steps, setSteps] = useState<Step[]>(editing?.steps ?? []);
   const [draftStep, setDraftStep] = useState('');
 
   const canSave = title.trim().length > 0;
@@ -84,16 +73,14 @@ export default function TaskEditor() {
 
     const patch = {
       title: title.trim(),
-      trackId,
+      notes: notes.trim() || undefined,
       status,
       priority,
       due,
-      notes: notes.trim() || undefined,
       steps,
-      // Marking done here has to keep `completedAt` truthful, since the board's
-      // toggle is not the only route to the done state.
-      completedAt:
-        status === 'done' ? (editing?.completedAt ?? Date.now()) : undefined,
+      // Marking done here has to keep `completedAt` truthful, since the list's
+      // checkbox is not the only route to the done state.
+      completedAt: status === 'done' ? (editing?.completedAt ?? Date.now()) : undefined,
     };
 
     if (editing) {
@@ -110,7 +97,7 @@ export default function TaskEditor() {
         say('Updated.', { mood: 'idle', undo: () => updateTask(before.id, before) });
       }
     } else {
-      const id = addTask({ ...patch, leadId: lead?.id });
+      const id = addTask(patch);
       notify('success');
       say(vaneOnAdd(patch.title, due !== undefined), {
         mood: 'idle',
@@ -125,7 +112,7 @@ export default function TaskEditor() {
     <View style={[s.root, { paddingTop: insets.top + space.md }]}>
       <Row style={{ justifyContent: 'space-between', marginBottom: space.md }}>
         <Txt variant="lead" weight="bold" spaced tone={subsystem.desk}>
-          {editing ? 'EDIT ITEM' : 'NEW ITEM'}
+          {editing ? 'EDIT ENTRY' : 'NEW ENTRY'}
         </Txt>
         <Row style={{ gap: space.lg }}>
           {editing && (
@@ -135,7 +122,7 @@ export default function TaskEditor() {
                 const before = { ...editing };
                 removeTask(editing.id);
                 notify('warning');
-                say('Removed from the board.', {
+                say('Removed from the docket.', {
                   mood: 'warn',
                   undo: () => useStore.setState((st) => ({ tasks: [before, ...st.tasks] })),
                 });
@@ -161,80 +148,78 @@ export default function TaskEditor() {
         <TextInput
           value={title}
           onChangeText={setTitle}
-          placeholder="What needs doing?"
+          placeholder="Title"
           placeholderTextColor={color.textFaint}
           style={[s.input, s.title]}
           autoFocus={!editing}
-          returnKeyType="done"
+          returnKeyType="next"
         />
 
-        {docket.tracks.length > 0 && (
-          <>
-            <FieldLabel>Track</FieldLabel>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: space.sm, paddingBottom: space.md }}
-              style={{ flexGrow: 0 }}>
-              {docket.tracks.map((t) => {
-                const active = t.id === trackId;
-                return (
-                  <Pressable
-                    key={t.id}
-                    onPress={() => setTrackId(active ? undefined : t.id)}
-                    style={[
-                      s.chip,
-                      active && { backgroundColor: `${t.color}25`, borderColor: t.color },
-                    ]}>
-                    <Txt variant="body">{t.icon}</Txt>
-                    <Txt variant="micro" weight="bold" tone={active ? t.color : color.textDim}>
-                      {t.name.toUpperCase()}
-                    </Txt>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </>
-        )}
+        {/* The body sits directly under the title. Everything below it is
+            optional structure for the entries that actually need it. */}
+        <TextInput
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Write as much as you want here."
+          placeholderTextColor={color.textFaint}
+          style={[s.input, s.notes]}
+          multiline
+          textAlignVertical="top"
+        />
 
-        <FieldLabel>Status</FieldLabel>
-        <Row style={s.segment}>
-          {STATUSES.map((st) => {
-            const active = st.value === status;
-            return (
-              <Pressable
-                key={st.value}
-                onPress={() => setStatus(st.value)}
-                style={[
-                  s.segItem,
-                  active && { backgroundColor: `${st.tone}22`, borderColor: st.tone },
-                ]}>
-                <Txt variant="micro" weight="bold" tone={active ? st.tone : color.textFaint}>
-                  {st.label}
-                </Txt>
-              </Pressable>
-            );
-          })}
-        </Row>
+        <Rule />
 
-        <FieldLabel>Priority</FieldLabel>
-        <Row style={s.segment}>
-          {PRIORITIES.map((p) => {
-            const active = p.value === priority;
-            return (
-              <Pressable
-                key={p.value}
-                onPress={() => setPriority(p.value)}
+        <FieldLabel>Steps</FieldLabel>
+        {steps.map((step) => (
+          <Row key={step.id} style={{ gap: space.sm, marginBottom: space.sm }}>
+            <Pressable
+              hitSlop={8}
+              onPress={() =>
+                setSteps((list) => list.map((x) => (x.id === step.id ? { ...x, done: !x.done } : x)))
+              }>
+              <View
                 style={[
-                  s.segItem,
-                  active && { backgroundColor: `${p.tone}22`, borderColor: p.tone },
+                  s.box,
+                  step.done && { backgroundColor: subsystem.desk, borderColor: subsystem.desk },
                 ]}>
-                <Txt variant="micro" weight="bold" tone={active ? p.tone : color.textFaint}>
-                  {p.label}
-                </Txt>
-              </Pressable>
-            );
-          })}
+                {step.done && (
+                  <Txt variant="micro" weight="bold" tone={color.accentText}>
+                    ✓
+                  </Txt>
+                )}
+              </View>
+            </Pressable>
+            <Txt
+              variant="caption"
+              dim={step.done}
+              style={[{ flex: 1 }, step.done && { textDecorationLine: 'line-through' }]}>
+              {step.text}
+            </Txt>
+            <Pressable
+              hitSlop={10}
+              onPress={() => setSteps((list) => list.filter((x) => x.id !== step.id))}>
+              <Txt variant="caption" tone={color.textFaint}>
+                ✕
+              </Txt>
+            </Pressable>
+          </Row>
+        ))}
+
+        <Row style={{ gap: space.sm, marginBottom: space.lg }}>
+          <TextInput
+            value={draftStep}
+            onChangeText={setDraftStep}
+            placeholder="Add a step"
+            placeholderTextColor={color.textFaint}
+            style={[s.input, { flex: 1, marginBottom: 0, height: 44 }]}
+            returnKeyType="done"
+            onSubmitEditing={addDraftStep}
+          />
+          <Pressable onPress={addDraftStep} style={s.addStep} hitSlop={6}>
+            <Txt variant="lead" weight="bold" tone={subsystem.desk}>
+              +
+            </Txt>
+          </Pressable>
         </Row>
 
         <FieldLabel>Deadline</FieldLabel>
@@ -250,10 +235,7 @@ export default function TaskEditor() {
                   s.day,
                   active && { borderColor: subsystem.desk, backgroundColor: `${subsystem.desk}1A` },
                 ]}>
-                <Txt
-                  variant="micro"
-                  weight="bold"
-                  tone={active ? subsystem.desk : color.textDim}>
+                <Txt variant="micro" weight="bold" tone={active ? subsystem.desk : color.textDim}>
                   {label}
                 </Txt>
               </Pressable>
@@ -279,74 +261,44 @@ export default function TaskEditor() {
           </Row>
         )}
 
-        <Rule />
-
-        <FieldLabel>Steps</FieldLabel>
-        {steps.map((step) => (
-          <Row key={step.id} style={{ gap: space.sm, marginBottom: space.sm }}>
-            <Pressable
-              hitSlop={8}
-              onPress={() =>
-                setSteps((list) =>
-                  list.map((x) => (x.id === step.id ? { ...x, done: !x.done } : x))
-                )
-              }>
-              <View style={[s.box, step.done && { backgroundColor: subsystem.desk, borderColor: subsystem.desk }]}>
-                {step.done && (
-                  <Txt variant="micro" weight="bold" tone={color.accentText}>
-                    ✓
-                  </Txt>
-                )}
-              </View>
-            </Pressable>
-            <Txt
-              variant="caption"
-              dim={step.done}
-              style={[{ flex: 1 }, step.done && { textDecorationLine: 'line-through' }]}>
-              {step.text}
-            </Txt>
-            <Pressable
-              hitSlop={10}
-              onPress={() => setSteps((list) => list.filter((x) => x.id !== step.id))}>
-              <Txt variant="caption" tone={color.textFaint}>
-                ✕
-              </Txt>
-            </Pressable>
-          </Row>
-        ))}
-
-        <Row style={{ gap: space.sm }}>
-          <TextInput
-            value={draftStep}
-            onChangeText={setDraftStep}
-            placeholder="Add a step"
-            placeholderTextColor={color.textFaint}
-            style={[s.input, { flex: 1, marginBottom: 0 }]}
-            returnKeyType="done"
-            onSubmitEditing={addDraftStep}
-          />
-          <Pressable onPress={addDraftStep} style={s.addStep} hitSlop={6}>
-            <Txt variant="lead" weight="bold" tone={subsystem.desk}>
-              +
-            </Txt>
-          </Pressable>
+        <FieldLabel>Status</FieldLabel>
+        <Row style={s.segment}>
+          {STATUSES.map((st) => {
+            const active = st.value === status;
+            return (
+              <Pressable
+                key={st.value}
+                onPress={() => setStatus(st.value)}
+                style={[s.segItem, active && { backgroundColor: `${st.tone}22`, borderColor: st.tone }]}>
+                <Txt variant="micro" weight="bold" tone={active ? st.tone : color.textFaint}>
+                  {st.label}
+                </Txt>
+              </Pressable>
+            );
+          })}
         </Row>
 
-        <FieldLabel>Notes</FieldLabel>
-        <TextInput
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Anything worth remembering"
-          placeholderTextColor={color.textFaint}
-          style={[s.input, s.notes]}
-          multiline
-          textAlignVertical="top"
-        />
+        <FieldLabel>Priority</FieldLabel>
+        <Row style={s.segment}>
+          {PRIORITIES.map((p) => {
+            const active = p.value === priority;
+            return (
+              <Pressable
+                key={p.value}
+                onPress={() => setPriority(p.value)}
+                style={[s.segItem, active && { backgroundColor: `${p.tone}22`, borderColor: p.tone }]}>
+                <Txt variant="micro" weight="bold" tone={active ? p.tone : color.textFaint}>
+                  {p.label}
+                </Txt>
+              </Pressable>
+            );
+          })}
+        </Row>
       </ScrollView>
 
       <View style={{ paddingBottom: insets.bottom + space.md, paddingTop: space.sm }}>
         <Button
-          label={canSave ? (editing ? 'Save changes' : 'Add to board') : 'Give it a title'}
+          label={canSave ? (editing ? 'Save changes' : 'Save') : 'Give it a title'}
           full
           disabled={!canSave}
           onPress={save}
@@ -369,7 +321,7 @@ const s = StyleSheet.create({
     marginBottom: space.md,
   },
   title: { height: 52, fontSize: 18, fontWeight: '700' },
-  notes: { minHeight: 110, paddingTop: space.md, lineHeight: 21 },
+  notes: { minHeight: 200, paddingTop: space.md, lineHeight: 22 },
   segment: { backgroundColor: color.surface, padding: 4, gap: 4, borderRadius: radius.md },
   segItem: {
     flex: 1,
@@ -379,17 +331,6 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
     borderRadius: radius.md,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: space.md,
-    height: 38,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
-    backgroundColor: color.surface,
   },
   day: {
     paddingHorizontal: space.md,

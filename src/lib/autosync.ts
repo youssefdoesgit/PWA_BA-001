@@ -37,7 +37,6 @@ function snapshot(): KevlarData {
     budgets: s.budgets,
     goals: s.goals,
     recurring: s.recurring,
-    tracks: s.tracks,
     tasks: s.tasks,
     settings: s.settings,
   };
@@ -131,13 +130,11 @@ function signature(): string {
     s.goals.length,
     s.recurring.length,
     s.categories.length,
-    s.tracks.length,
     s.tasks.length,
     newest(s.transactions),
     newest(s.budgets),
     newest(s.goals),
     newest(s.recurring),
-    newest(s.tracks),
     newest(s.tasks),
     s.settings.settingsUpdatedAt ?? 0,
   ].join(':');

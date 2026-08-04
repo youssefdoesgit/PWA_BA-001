@@ -16,7 +16,6 @@ import type {
   Settings,
   Task,
   TaskStatus,
-  Track,
   Transaction,
 } from './types';
 
@@ -55,31 +54,6 @@ const seedCategories = (): Category[] =>
     updatedAt: Date.now(),
   }));
 
-/**
- * Opening tracks for the docket.
- *
- * Seeded rather than left empty because an empty board gives VANE nothing to
- * reason about, and because these four are what he actually said he is
- * chasing. All of them are removable.
- */
-const seedTracks = (): Track[] =>
-  (
-    [
-      ['Scholarships', '🎓', 'scholarship'],
-      ['Game Dev', '🎮', 'gamedev'],
-      ['Learning', '📚', 'learning'],
-      ['Jams & Comps', '🏁', 'competition'],
-    ] as const
-  ).map(([name, icon, field], i) => ({
-    id: uid(),
-    name,
-    icon,
-    field,
-    color: swatch[i % swatch.length],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  }));
-
 const seedSettings = (): Settings => ({
   name: '',
   currency: 'USD',
@@ -91,8 +65,6 @@ const seedSettings = (): Settings => ({
   rateOverrides: {},
   travelCurrencies: ['USD', 'EUR', 'GBP', 'TND', 'AED', 'JPY'],
   islamicMode: true,
-  dismissedLeads: [],
-  docketTourDone: false,
 });
 
 const emptyData = (): KevlarData => ({
@@ -102,7 +74,6 @@ const emptyData = (): KevlarData => ({
   budgets: [],
   goals: [],
   recurring: [],
-  tracks: seedTracks(),
   tasks: [],
   settings: seedSettings(),
 });
@@ -131,18 +102,11 @@ type Actions = {
   /** Logs the bill as a real transaction and rolls `nextDue` forward. */
   payRecurring: (id: string) => void;
 
-  addTrack: (t: Omit<Track, 'id' | 'createdAt' | 'updatedAt'>) => string;
-  updateTrack: (id: string, patch: Partial<Track>) => void;
-  removeTrack: (id: string) => void;
-
   addTask: (t: Partial<Task> & { title: string }) => string;
   updateTask: (id: string, patch: Partial<Task>) => void;
   removeTask: (id: string) => void;
   /** Flips done/undone and keeps `completedAt` honest. */
   toggleTask: (id: string) => void;
-
-  /** Waves a catalogue lead off for good. Union-merged, so it survives sync. */
-  dismissLead: (leadId: string) => void;
 
   updateSettings: (patch: Partial<Settings>) => void;
   replaceAll: (data: KevlarData) => void;
@@ -264,29 +228,6 @@ export const useStore = create<KevlarStore>()(
 
       /* --- Docket ------------------------------------------------------- */
 
-      addTrack: (t) => {
-        const id = uid();
-        set((s) => ({
-          tracks: [...s.tracks, { ...t, id, createdAt: Date.now(), updatedAt: Date.now() }],
-        }));
-        return id;
-      },
-      updateTrack: (id, patch) =>
-        set((s) => ({
-          tracks: s.tracks.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t)),
-        })),
-      removeTrack: (id) =>
-        set((s) => ({
-          tracks: s.tracks.map((t) =>
-            t.id === id ? { ...t, deletedAt: Date.now(), updatedAt: Date.now() } : t
-          ),
-          // Orphan the tasks rather than deleting them. Retiring a track is a
-          // change of filing, not a decision to abandon the work under it.
-          tasks: s.tasks.map((t) =>
-            t.trackId === id ? { ...t, trackId: undefined, updatedAt: Date.now() } : t
-          ),
-        })),
-
       addTask: (t) => {
         const id = uid();
         const task: Task = {
@@ -325,12 +266,6 @@ export const useStore = create<KevlarStore>()(
           }),
         })),
 
-      dismissLead: (leadId) => {
-        const current = get().settings.dismissedLeads ?? [];
-        if (current.includes(leadId)) return;
-        get().updateSettings({ dismissedLeads: [...current, leadId] });
-      },
-
       updateSettings: (patch) =>
         set((s) => {
           const now = Date.now();
@@ -366,13 +301,10 @@ export const useStore = create<KevlarStore>()(
         if (!d.transactions!.every((t) => typeof t?.amount === 'number' && typeof t?.date === 'number')) {
           return { ok: false, error: 'Transaction records are malformed.' };
         }
-        // The docket arrived after these two, so a v2 backup legitimately has
-        // neither. Absent means "this predates the docket" and gets the starter
-        // tracks; present-but-empty means he cleared them on purpose.
-        for (const key of ['tracks', 'tasks'] as const) {
-          if (d[key] !== undefined && !Array.isArray(d[key])) {
-            return { ok: false, error: `Invalid "${key}".` };
-          }
+        // The docket arrived after everything above it, so a backup taken
+        // before it legitimately has no `tasks` key at all.
+        if (d.tasks !== undefined && !Array.isArray(d.tasks)) {
+          return { ok: false, error: 'Invalid "tasks".' };
         }
 
         set({
@@ -382,7 +314,6 @@ export const useStore = create<KevlarStore>()(
           budgets: d.budgets!,
           goals: d.goals!,
           recurring: d.recurring!,
-          tracks: d.tracks ?? seedTracks(),
           tasks: d.tasks ?? [],
           // Merge over defaults so a backup from an older build still opens.
           settings: { ...seedSettings(), ...d.settings },
@@ -428,7 +359,6 @@ export const useStore = create<KevlarStore>()(
         budgets: s.budgets,
         goals: s.goals,
         recurring: s.recurring,
-        tracks: s.tracks,
         tasks: s.tasks,
         settings: s.settings,
       }),
@@ -441,10 +371,9 @@ export const useStore = create<KevlarStore>()(
         return {
           ...current,
           ...p,
-          // Storage written before the docket existed has no `tracks` key at
+          // Storage written before the docket existed has no `tasks` key at
           // all. Spreading it over the defaults would leave the array
-          // undefined, so fall back to the seeded set explicitly.
-          tracks: p.tracks ?? current.tracks,
+          // undefined, so fall back explicitly.
           tasks: p.tasks ?? current.tasks,
           settings: { ...current.settings, ...(p.settings ?? {}) },
         };
@@ -469,7 +398,6 @@ export function useData(): KevlarData {
   const budgets = useStore((s) => s.budgets);
   const goals = useStore((s) => s.goals);
   const recurring = useStore((s) => s.recurring);
-  const tracks = useStore((s) => s.tracks);
   const tasks = useStore((s) => s.tasks);
   const settings = useStore((s) => s.settings);
 
@@ -482,24 +410,19 @@ export function useData(): KevlarData {
       budgets: alive(budgets),
       goals: alive(goals),
       recurring: alive(recurring),
-      tracks: alive(tracks),
       tasks: alive(tasks),
       settings,
     }),
-    [version, categories, transactions, budgets, goals, recurring, tracks, tasks, settings]
+    [version, categories, transactions, budgets, goals, recurring, tasks, settings]
   );
 }
 
 /** The docket's slice. Money changes constantly; the board should not re-render for it. */
 export function useDocket(): DocketData {
-  const tracks = useStore((s) => s.tracks);
   const tasks = useStore((s) => s.tasks);
   const settings = useStore((s) => s.settings);
 
-  return useMemo(
-    () => ({ tracks: alive(tracks), tasks: alive(tasks), settings }),
-    [tracks, tasks, settings]
-  );
+  return useMemo(() => ({ tasks: alive(tasks), settings }), [tasks, settings]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -618,19 +541,9 @@ export function sortTasks(list: Task[]): Task[] {
   });
 }
 
-/** Tasks finished since `since`. Feeds VANE's read on momentum. */
+/** Notes finished since `since`. Feeds VANE's read on momentum. */
 export function completedSince(d: DocketData, since: number): Task[] {
   return d.tasks.filter((t) => isDone(t) && (t.completedAt ?? 0) >= since);
-}
-
-/** Open tasks per track, so a neglected area is visible at a glance. */
-export function loadByTrack(d: DocketData): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const t of openTasks(d)) {
-    if (!t.trackId) continue;
-    out.set(t.trackId, (out.get(t.trackId) ?? 0) + 1);
-  }
-  return out;
 }
 
 /** Spend per category for an arbitrary budget month. */

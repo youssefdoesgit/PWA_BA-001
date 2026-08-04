@@ -183,7 +183,7 @@ export default function Mainframe() {
 
   const deskHeadline =
     open.length === 0
-      ? 'Board clear'
+      ? 'Nothing written down'
       : late.length > 0
         ? `${open.length} open · ${late.length} overdue`
         : next
@@ -247,7 +247,7 @@ export default function Mainframe() {
           tone={subsystem.desk}
           unit="vane"
           headline={deskHeadline}
-          status={desk.items[0]?.text ?? 'Board is clear.'}
+          status={desk.items[0]?.text ?? 'Docket is clear.'}
           statusTone={TONE[desk.items[0]?.tone ?? 'good']}
           onPress={() => router.navigate('/desk')}
         />

@@ -48,7 +48,7 @@ export default function Brief() {
         <FileHeader
           title="Brief"
           code="DKT-002/B"
-          subtitle="Everything VANE can tell from the board, computed on this device."
+          subtitle="Everything VANE can tell from your notes, computed on this device."
         />
       </Rise>
 
@@ -61,7 +61,7 @@ export default function Brief() {
       <Rise delay={90}>
         <SectionTitle>Readout</SectionTitle>
         <Card>
-          <LeaderRow label="On the board" value={String(open.length)} />
+          <LeaderRow label="Open entries" value={String(open.length)} />
           <LeaderRow
             label="Past deadline"
             value={String(late.length)}
@@ -84,7 +84,7 @@ export default function Brief() {
           <Empty
             icon="◉"
             title="Nothing to report"
-            body="No deadlines, no drift, nothing gone cold. Put something on the board and I will have more to say."
+            body="No deadlines, no drift, nothing gone cold. Write more down and I will have more to say."
           />
         ) : (
           signals.map((sig) => (
@@ -130,8 +130,8 @@ export default function Brief() {
           variant="micro"
           faint
           style={{ textAlign: 'center', lineHeight: 17, marginTop: space.sm }}>
-          VANE is a rules engine, not a model. She has no connection, no access to listings, and no
-          way to check whether a deadline moved.
+          VANE is a rules engine, not a model. She reads what you have written down and nothing
+          else — no connection, no lookups.
         </Txt>
       </Rise>
     </Screen>

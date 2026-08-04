@@ -2,10 +2,10 @@
  * VANE's voice and judgement.
  *
  * The docket's unit, and deliberately nothing like BRIC. BRIC is staff: he
- * defers, he softens, he calls him sir. VANE is a colleague running the board
- * — brisk, forward-facing, mildly impatient, and entirely uninterested in
- * flattering anyone. She reports what is closing and what has gone cold, then
- * gets out of the way.
+ * defers, he softens, he calls him sir. VANE is a colleague reading over your
+ * notes — brisk, forward-facing, mildly impatient, and entirely uninterested
+ * in flattering anyone. She reports what is closing and what has gone cold,
+ * then gets out of the way.
  *
  * Fragments are intentional. So is the refusal to congratulate him for work he
  * has not finished.
@@ -15,8 +15,7 @@
  */
 
 import { DAY } from './date';
-import { isRolling, LEADS, monthsUntilWindow, type Lead } from './leads';
-import { completedSince, dueWithin, isDone, loadByTrack, openTasks, overdueTasks } from './store';
+import { completedSince, dueWithin, isDone, openTasks, overdueTasks } from './store';
 import type { BriefItem, Briefing, BriefTone } from './bric';
 import type { Mood } from '@/components/ui/agency';
 import type { DocketData, Task } from './types';
@@ -59,16 +58,16 @@ export function vaneGreeting(d: DocketData): string {
     const next = soon[0];
     const days = daysUntil(next.due ?? 0);
     return pick([
-      `Clock's running. "${next.title}" ${days <= 1 ? 'closes today' : `closes in ${plural(days, 'day')}`}.`,
+      `Clock's running. "${next.title}" is due ${days <= 1 ? 'today' : `in ${plural(days, 'day')}`}.`,
       `Next thing up: "${next.title}". ${days <= 1 ? 'Today.' : `${days} days.`} Start it now, not tonight.`,
     ]);
   }
 
   if (open.length === 0) {
     return pick([
-      `Board's empty, ${name}. Either you're between things or you've stopped writing them down.`,
-      `Nothing on the board. That's either discipline or avoidance — you'd know which.`,
-      `Clear board. Good time to put something ambitious on it.`,
+      `Docket's empty, ${name}. Either you're between things or you've stopped writing them down.`,
+      `Nothing written down. That's either discipline or avoidance — you'd know which.`,
+      `Clear docket. Good time to put something on it while you're thinking about it.`,
     ]);
   }
 
@@ -107,15 +106,15 @@ export function vaneGreeting(d: DocketData): string {
 export function vaneOnAdd(title: string, hasDue: boolean): string {
   if (!hasDue) {
     return pick([
-      `"${title}" logged. No date on it, so it'll drift. Your call.`,
-      `On the board. Give it a deadline when you're ready to be honest about one.`,
-      `Noted — "${title}". Undated things have a way of staying undated.`,
+      `"${title}" written down. No date on it, so it'll sit there quietly. Fine by me.`,
+      `Noted. Give it a deadline if it needs one.`,
+      `Got it — "${title}". Undated things have a way of staying undated.`,
     ]);
   }
   return pick([
-    `"${title}" is on the board with a clock. Better.`,
-    `Logged and dated. I'll start counting.`,
-    `Got it. Dated items are the only ones I can actually chase you about.`,
+    `"${title}" is down with a clock on it. Better.`,
+    `Noted and dated. I'll start counting.`,
+    `Got it. Dated entries are the only ones I can actually chase you about.`,
   ]);
 }
 
@@ -128,38 +127,17 @@ export function vaneOnDone(title: string, streak: number): string {
   }
   return pick([
     `"${title}" cleared. Next.`,
-    `Closed. Board's lighter.`,
+    `Closed. Docket's lighter.`,
     `Done. I'd say well played, but you'd get complacent.`,
   ]);
 }
 
 export function vaneOnUndo(title: string): string {
   return pick([
-    `"${title}" back on the board. No judgement.`,
+    `"${title}" is back. No judgement.`,
     `Reopened. Happens.`,
     `Un-done. The clock resumes.`,
   ]);
-}
-
-export function vaneOnRaise(name: string): string {
-  return pick([
-    `"${name}" is on the board with its checklist. Work the steps, not the vibes.`,
-    `Raised. I've pre-loaded the steps — verify the dates yourself before you plan around them.`,
-    `On the board. First step is the only one that matters right now.`,
-  ]);
-}
-
-export function vaneOnDismiss(): string {
-  return pick([
-    `Dropped. I won't raise it again.`,
-    `Off the radar for good. You can undo that in settings if you change your mind.`,
-    `Noted. Not your thing.`,
-  ]);
-}
-
-/** Standing disclaimer. The catalogue is static and she says so, every time. */
-export function vaneCatalogueNote(): string {
-  return 'This catalogue is baked into the app — it has no connection and cannot check itself. Windows are approximate and shift year to year. Verify every date before you plan around it.';
 }
 
 /* -------------------------------------------------------------------------- */
@@ -176,7 +154,14 @@ export type Signal = {
   href?: string;
 };
 
-/** Open, undated, untouched and old. The definition of a thing that has died quietly. */
+/**
+ * Open, undated, untouched and old.
+ *
+ * Note that a *note* going untouched is not a problem — plenty of things are
+ * written down purely to stop carrying them in your head. This only fires on
+ * entries with a checklist started and abandoned, or nothing done at all,
+ * which is the shape of an intention that quietly died.
+ */
 const STALE_DAYS = 21;
 /** More than this many at once and nothing is actually getting finished. */
 const WIP_LIMIT = 6;
@@ -197,7 +182,7 @@ export function buildSignals(d: DocketData, at = Date.now()): Signal[] {
     out.push({
       id: 'overdue',
       severity: 'alarm',
-      title: `${plural(late.length, 'item')} past deadline`,
+      title: `${plural(late.length, 'entry', 'entries')} past deadline`,
       detail: `"${worst.title}" was due ${plural(Math.abs(daysUntil(worst.due ?? at, at)), 'day')} ago. If it is genuinely gone, close it and stop carrying it. If it is not, it is the only thing that matters today.`,
       href: '/desk',
     });
@@ -208,9 +193,14 @@ export function buildSignals(d: DocketData, at = Date.now()): Signal[] {
     const days = daysUntil(next.due ?? at, at);
     out.push({
       id: 'closing',
-      severity: 'alarm',
-      title: `"${next.title}" ${days <= 1 ? 'closes today' : `closes in ${plural(days, 'day')}`}`,
-      detail: `Nothing else on the board outranks this until it is submitted. Applications close at a specific hour, not a specific day — check which.`,
+      // Only today and tomorrow warrant the full alarm. Shouting about
+      // everything three days out just teaches him to ignore me.
+      severity: days <= 1 ? 'alarm' : 'warn',
+      title: `"${next.title}" ${days <= 1 ? 'is due today' : `is due in ${plural(days, 'day')}`}`,
+      detail:
+        days <= 1
+          ? `Nothing else here outranks it. If it has a specific hour attached, check which — days are not deadlines.`
+          : `Enough time if you start now, not enough if you start the night before.`,
       href: '/desk',
     });
   } else if (week.length > 0) {
@@ -235,7 +225,7 @@ export function buildSignals(d: DocketData, at = Date.now()): Signal[] {
     out.push({
       id: 'stale',
       severity: 'warn',
-      title: `${plural(stale.length, 'item has', 'items have')} gone cold`,
+      title: `${plural(stale.length, 'entry has', 'entries have')} gone cold`,
       detail: `Open for over ${STALE_DAYS} days with no step completed and no deadline — starting with "${stale[0].title}". Give each one a date or delete it. Carrying it costs you attention either way.`,
       href: '/desk',
     });
@@ -259,54 +249,29 @@ export function buildSignals(d: DocketData, at = Date.now()): Signal[] {
     out.push({
       id: 'blocked',
       severity: 'warn',
-      title: `${plural(blocked.length, 'item')} blocked over a week`,
+      title: `${plural(blocked.length, 'entry', 'entries')} blocked over a week`,
       detail: `"${blocked[0].title}" has been waiting on someone else since before last week. Chase it or unblock it yourself — nobody else is tracking this.`,
       href: '/desk',
     });
   }
 
-  /* --- Opportunity windows --------------------------------------------- */
-
-  for (const lead of openingSoon(d, 1, at).slice(0, 2)) {
-    const gap = monthsUntilWindow(lead, new Date(at));
-    out.push({
-      id: `lead-${lead.id}`,
-      severity: 'info',
-      title: `${lead.name} — ${gap === 0 ? 'window is open' : 'opens next month'}`,
-      detail: `${lead.what} ${lead.why}`,
-      href: '/desk/radar',
-    });
-  }
-
-  /* --- Shape of the board ---------------------------------------------- */
+  /* --- Shape of the docket ---------------------------------------------- */
 
   if (open.length === 0) {
     out.push({
       id: 'empty',
       severity: 'info',
-      title: 'Nothing on the board',
-      detail: `An empty board is only good news if it is true. Radar has ${LEADS.length} things filed under game dev, scholarships and competitions — start there.`,
-      href: '/desk/radar',
+      title: 'Nothing written down',
+      detail: `An empty docket is only good news if it is true. Anything you are holding in your head right now belongs here instead — it does not need a deadline to be worth writing down.`,
+      href: '/desk',
     });
   } else if (open.every((t) => t.due === undefined)) {
     out.push({
       id: 'no-dates',
       severity: 'info',
-      title: 'Nothing on the board has a date',
-      detail: `${plural(open.length, 'open item')}, not one with a deadline. Undated work slides indefinitely and nobody notices, including me — I cannot chase what has no clock.`,
+      title: 'Nothing here has a date',
+      detail: `${plural(open.length, 'open entry', 'open entries')}, not one with a deadline. That is fine for notes. For anything that actually has to happen, I cannot chase what has no clock.`,
       href: '/desk',
-    });
-  }
-
-  const load = loadByTrack(d);
-  const idle = d.tracks.filter((t) => (load.get(t.id) ?? 0) === 0);
-  if (idle.length > 0 && open.length > 0) {
-    out.push({
-      id: 'idle-track',
-      severity: 'info',
-      title: `${idle.length === 1 ? `${idle[0].name} has nothing on it` : `${idle.length} tracks are empty`}`,
-      detail: `${idle.map((t) => t.name).join(', ')} — nothing open. Either that ambition is dormant or it has quietly ended. Both are fine; drifting between the two is not.`,
-      href: '/desk/tracks',
     });
   }
 
@@ -317,7 +282,7 @@ export function buildSignals(d: DocketData, at = Date.now()): Signal[] {
     out.push({
       id: 'momentum',
       severity: 'good',
-      title: `${plural(doneWeek.length, 'item')} cleared this week`,
+      title: `${plural(doneWeek.length, 'entry', 'entries')} cleared this week`,
       detail: `That is a real rate. The thing that kills it is starting something large before the current run ends — finish what is open first.`,
       href: '/desk',
     });
@@ -326,38 +291,13 @@ export function buildSignals(d: DocketData, at = Date.now()): Signal[] {
       id: 'steady',
       severity: 'good',
       title: 'Nothing overdue, nothing closing',
-      detail: `Quiet weeks are when portfolio work actually gets done. Deadlines will not give you this window again for a while.`,
+      detail: `Quiet weeks are when the work you actually care about gets done. Deadlines will not give you this window again for a while.`,
       href: '/desk',
     });
   }
 
   const rank: Record<Severity, number> = { alarm: 0, warn: 1, info: 2, good: 3 };
   return out.sort((a, b) => rank[a.severity] - rank[b.severity]);
-}
-
-/* -------------------------------------------------------------------------- */
-/* Radar                                                                      */
-/* -------------------------------------------------------------------------- */
-
-/** Leads he has neither dismissed nor already raised onto the board. */
-export function liveLeads(d: DocketData): Lead[] {
-  const dismissed = new Set(d.settings.dismissedLeads ?? []);
-  const raised = new Set(d.tasks.filter((t) => t.leadId).map((t) => t.leadId));
-  return LEADS.filter((l) => !dismissed.has(l.id) && !raised.has(l.id));
-}
-
-/**
- * Live leads whose window is open now or opens within `months`.
- *
- * Rolling entries are excluded here even though they are always technically
- * open — a briefing that leads with "open source exists" every single day is
- * noise, and noise is what makes people stop reading briefings.
- */
-export function openingSoon(d: DocketData, months = 1, at = Date.now()): Lead[] {
-  const now = new Date(at);
-  return liveLeads(d)
-    .filter((l) => !isRolling(l) && monthsUntilWindow(l, now) <= months)
-    .sort((a, b) => monthsUntilWindow(a, now) - monthsUntilWindow(b, now));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -390,7 +330,7 @@ export function vaneBriefing(d: DocketData, at = Date.now()): Briefing {
   }));
 
   if (items.length === 0) {
-    items.push({ id: 'clear', text: 'Board is clear.', tone: 'good', href: '/desk' });
+    items.push({ id: 'clear', text: 'Docket is clear.', tone: 'good', href: '/desk' });
   }
 
   return {
@@ -403,7 +343,7 @@ export function vaneBriefing(d: DocketData, at = Date.now()): Briefing {
 export function vaneSignoff(): string {
   return pick([
     'All of this is computed here. Nothing left the device to produce it.',
-    'No network, no lookups. Just your board and a set of rules.',
+    'No network, no lookups. Just your notes and a set of rules.',
     'I only know what you have written down. Write more down.',
   ]);
 }
