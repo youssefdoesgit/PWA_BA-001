@@ -12,7 +12,7 @@
  * every cache that is not the current one, so a rename discards the old
  * build wholesale rather than hoping each entry revalidates.
  */
-const CACHE = 'kevlar-v2';
+const CACHE = 'kevlar-v3-mainframe';
 const SHELL = './';
 
 self.addEventListener('install', (event) => {

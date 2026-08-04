@@ -15,14 +15,19 @@ import { color, radius, space } from '@/theme/tokens';
 /* -------------------------------------------------------------------------- */
 
 const BOOT = [
-  'KEVLAR PERSONAL FINANCE TERMINAL',
-  'FIRMWARE v1.0 · AMBER PHOSPHOR',
+  'KEVLAR MAINFRAME',
+  'FIRMWARE v2.0 · AMBER PHOSPHOR',
   '',
   'MEMORY CHECK .............. OK',
-  'LOCAL LEDGER .............. OK',
+  'LOCAL STORE ............... OK',
   'NETWORK INTERFACE ......... NONE',
   'ENCRYPTION ................ ON DEVICE',
-  'ADVISORY MODULE [BRIC] .... ONLINE',
+  '',
+  'BNK-001 [BANKING] ......... ONLINE',
+  '  UNIT [BRIC] ............. ONLINE',
+  'DKT-002 [DOCKET] .......... ONLINE',
+  '  UNIT [VANE] ............. ONLINE',
+  'SLOT 003 .................. UNASSIGNED',
   '',
   'NO REMOTE CONNECTION DETECTED.',
   'THIS IS INTENTIONAL.',

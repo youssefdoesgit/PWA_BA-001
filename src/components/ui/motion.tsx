@@ -146,6 +146,46 @@ export function Pulse({
   return <Animated.View style={[style, anim]}>{children}</Animated.View>;
 }
 
+/**
+ * A bar sweeping back and forth inside a track, like a radar returning.
+ *
+ * Used instead of a pulse where something should read as *actively looking*
+ * rather than merely waiting.
+ */
+export function Scan({
+  width,
+  tone,
+  height = 2,
+  ms = 1700,
+}: {
+  width: number;
+  tone: string;
+  height?: number;
+  ms?: number;
+}) {
+  const head = width * 0.34;
+  const x = useSharedValue(0);
+
+  useEffect(() => {
+    x.value = withRepeat(
+      withSequence(
+        withTiming(width - head, { duration: ms, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: ms, easing: Easing.inOut(Easing.quad) })
+      ),
+      -1,
+      false
+    );
+  }, [x, width, head, ms]);
+
+  const anim = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+
+  return (
+    <View style={{ width, height, backgroundColor: `${tone}30`, overflow: 'hidden' }}>
+      <Animated.View style={[{ width: head, height, backgroundColor: tone }, anim]} />
+    </View>
+  );
+}
+
 /** Types a string out one character at a time. */
 export function useTypewriter(text: string, cps = 55): string {
   const [shown, setShown] = useState('');

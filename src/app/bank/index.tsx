@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { SyncPip } from '@/components/sync-pip';
 import { Bric, LeaderRow } from '@/components/ui/agency';
 import { CurrencyStrip } from '@/components/ui/currency-strip';
 import { Rise, useRolling, useTypewriter } from '@/components/ui/motion';
@@ -42,22 +41,6 @@ export default function Home() {
   return (
     <View style={{ flex: 1 }}>
       <Screen>
-        <Rise>
-          <Row style={{ justifyContent: 'space-between', marginBottom: space.md }}>
-            <Row style={{ gap: space.md, alignItems: 'center' }}>
-              <Txt variant="micro" spaced tone={color.rust} weight="bold">
-                KEVLAR
-              </Txt>
-              <SyncPip />
-            </Row>
-            <Pressable onPress={() => router.push('/settings')} hitSlop={14}>
-              <Txt variant="title" dim>
-                ⚙
-              </Txt>
-            </Pressable>
-          </Row>
-        </Rise>
-
         {/* BRIC leads. Everything else is his supporting material. */}
         <Rise delay={40}>
           <Card label="briefing" tint={TONE[brief.items[0]?.tone ?? 'good']}>
@@ -139,7 +122,7 @@ export default function Home() {
         <Rise delay={220}>
           <SectionTitle
             action={
-              <Pressable hitSlop={8} onPress={() => router.push('/log')}>
+              <Pressable hitSlop={8} onPress={() => router.push('/bank/log')}>
                 <Txt variant="micro" weight="bold" spaced tone={color.accent}>
                   ALL
                 </Txt>

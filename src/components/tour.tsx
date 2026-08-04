@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Bric } from '@/components/ui/agency';
+import { Bric, Vane } from '@/components/ui/agency';
 import { Fade, useTypewriter } from '@/components/ui/motion';
 import { Tap } from '@/components/ui/press';
 import { Row, Txt } from '@/components/ui/primitives';
@@ -26,6 +26,8 @@ type Step = {
   route: string;
   mood: Mood;
   says: string;
+  /** Who is talking. Each subsystem is introduced by its own unit. */
+  unit: 'bric' | 'vane';
   /** Spotlight position as a fraction of the viewport height. */
   top: number;
   height: number;
@@ -34,59 +36,99 @@ type Step = {
 const STEPS: Step[] = [
   {
     route: '/',
+    unit: 'bric',
     mood: 'happy',
-    says: "I'm BRIC. Ten seconds and you'll know the whole thing. This is your balance — everything you have, one figure.",
-    top: 0.09,
-    height: 0.2,
+    says: "I'm BRIC. This is the mainframe — KEVLAR is a shell, and everything it runs is listed here.",
+    top: 0.22,
+    height: 0.16,
   },
   {
     route: '/',
+    unit: 'bric',
     mood: 'idle',
-    says: 'Drag that figure sideways. The same money, in euros, dinars, wherever you happen to be standing.',
-    top: 0.09,
-    height: 0.2,
+    says: 'Two subsystems at present. Banking is mine. The docket belongs to VANE, and you will meet her shortly.',
+    top: 0.38,
+    height: 0.34,
   },
   {
-    route: '/',
+    route: '/bank',
+    unit: 'bric',
     mood: 'idle',
-    says: 'Quick log. Tap a category, enter the amount, done. That is the entire daily routine.',
-    top: 0.42,
-    height: 0.14,
-  },
-  {
-    route: '/log',
-    mood: 'idle',
-    says: 'Everything you record lands here. Search it, filter it, long-press to remove.',
-    top: 0.07,
+    says: 'Banking. Your balance — everything you have, one figure. Drag it sideways for euros, dinars, wherever you are standing.',
+    top: 0.2,
     height: 0.22,
   },
   {
-    route: '/budgets',
+    route: '/bank',
+    unit: 'bric',
+    mood: 'idle',
+    says: 'Quick log. Tap a category, enter the amount, done. That is the entire daily routine.',
+    top: 0.5,
+    height: 0.14,
+  },
+  {
+    route: '/bank/log',
+    unit: 'bric',
+    mood: 'idle',
+    says: 'Everything you record lands here. Search it, filter it, long-press to remove.',
+    top: 0.14,
+    height: 0.22,
+  },
+  {
+    route: '/bank/budgets',
+    unit: 'bric',
     mood: 'think',
     says: 'Set a cap per category. The meter turns amber near the line and red past it. No cap, no nagging.',
-    top: 0.07,
+    top: 0.14,
     height: 0.26,
   },
   {
-    route: '/goals',
-    mood: 'think',
-    says: 'What you are saving toward, plus the bills that leave on their own. I total those up for you.',
-    top: 0.07,
-    height: 0.24,
-  },
-  {
-    route: '/advisor',
+    route: '/bank/advisor',
+    unit: 'bric',
     mood: 'warn',
     says: 'And this is me. I read your figures and give you the honest version, zakat included. Nothing leaves the device.',
-    top: 0.07,
+    top: 0.14,
+    height: 0.26,
+  },
+  {
+    route: '/desk',
+    unit: 'vane',
+    mood: 'idle',
+    says: "VANE. I run the docket — scholarships, jams, whatever you're chasing. BRIC handles what you spend. I handle what you owe your future self.",
+    top: 0.14,
+    height: 0.28,
+  },
+  {
+    route: '/desk',
+    unit: 'vane',
+    mood: 'idle',
+    says: 'This is the board. Anything with a deadline sorts to the top, because deadlines outrank ambition every time.',
+    top: 0.46,
+    height: 0.2,
+  },
+  {
+    route: '/desk/radar',
+    unit: 'vane',
+    mood: 'think',
+    says: 'Radar. Jams, scholarships, competitions — filed by when they open. It is a static list baked into the app, so verify every date yourself.',
+    top: 0.14,
+    height: 0.26,
+  },
+  {
+    route: '/desk/brief',
+    unit: 'vane',
+    mood: 'warn',
+    says: "And this is where I tell you what's slipping. Overdue, gone cold, too many things started at once. Rules over your board, nothing more.",
+    top: 0.14,
     height: 0.26,
   },
   {
     route: '/',
+    unit: 'bric',
     mood: 'happy',
-    says: 'That is everything, sir. Record something and I shall start earning my keep.',
-    top: 0.42,
-    height: 0.14,
+    says: 'That is the whole machine, sir. Record something, or put something on the board, and we shall start earning our keep.',
+    top: 0.38,
+    height: 0.34,
   },
 ];
 
@@ -176,10 +218,14 @@ export function Tour() {
         ]}>
         <View style={s.panel}>
           <Row style={{ gap: space.md, alignItems: 'flex-start' }}>
-            <Bric mood={current.mood} size={46} />
+            {current.unit === 'bric' ? (
+              <Bric mood={current.mood} size={46} />
+            ) : (
+              <Vane mood={current.mood} size={42} />
+            )}
             <View style={{ flex: 1 }}>
               <Txt variant="micro" spaced weight="bold" tone={color.rust}>
-                {`BRIC · ${step + 1} OF ${STEPS.length}`}
+                {`${current.unit.toUpperCase()} · ${step + 1} OF ${STEPS.length}`}
               </Txt>
               <Txt variant="caption" style={{ marginTop: 4, lineHeight: 19, minHeight: 76 }}>
                 {typed}

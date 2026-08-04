@@ -12,7 +12,17 @@
  * deleted entry or silently drop one, and this is a ledger.
  */
 
-import type { Budget, Category, Goal, KevlarData, Recurring, Settings, Transaction } from './types';
+import type {
+  Budget,
+  Category,
+  Goal,
+  KevlarData,
+  Recurring,
+  Settings,
+  Task,
+  Track,
+  Transaction,
+} from './types';
 
 type WithId = { id: string; updatedAt: number; deletedAt?: number };
 
@@ -38,9 +48,24 @@ function mergeList<T extends WithId>(local: T[], remote: T[]): T[] {
 /** Never travels: how *this* device reaches the server is its own business. */
 const DEVICE_ONLY = ['syncUrl', 'syncKey', 'passphrase', 'passphraseCheck', 'syncedAt'] as const;
 
+/**
+ * Settings keys that accumulate rather than replace.
+ *
+ * Last-write-wins is right for a preference, and wrong for a growing list of
+ * things you have dealt with: dismissing one lead on the phone and a different
+ * one on the PC would otherwise throw away whichever synced first.
+ */
+const UNION_KEYS = ['dismissedLeads'] as const;
+
 /** Treats blank strings and undefined as "never actually set". */
 function isBlank(v: unknown): boolean {
   return v === undefined || v === null || v === '';
+}
+
+/** Order-independent union of two string lists. */
+function unite(a: unknown, b: unknown): string[] {
+  const list = [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])];
+  return [...new Set(list.filter((v): v is string => typeof v === 'string'))].sort();
 }
 
 /**
@@ -66,6 +91,12 @@ function mergeSettings(local: Settings, remote: Settings): Settings {
     const rVal = (remote as Record<string, unknown>)[key];
     const lTime = lt[key];
     const rTime = rt[key];
+
+    // Accumulating keys never choose a winner — both sides are kept.
+    if ((UNION_KEYS as readonly string[]).includes(key)) {
+      out[key] = unite(lVal, rVal);
+      continue;
+    }
 
     // Both sides set it deliberately: newest wins, ties to remote so the two
     // devices converge on the same answer rather than ping-ponging.
@@ -108,6 +139,11 @@ export function mergeData(local: KevlarData, remote: KevlarData): KevlarData {
     budgets: mergeList<Budget>(local.budgets, remote.budgets),
     goals: mergeList<Goal>(local.goals, remote.goals),
     recurring: mergeList<Recurring>(local.recurring, remote.recurring),
+    // A device still running a pre-docket build sends neither list. Treating
+    // that as "empty" would tombstone nothing but would hand back a board with
+    // no tracks, so fall back to whichever side actually has them.
+    tracks: mergeList<Track>(local.tracks ?? [], remote.tracks ?? []),
+    tasks: mergeList<Task>(local.tasks ?? [], remote.tasks ?? []),
     settings: mergeSettings(local.settings, remote.settings),
   };
 }
@@ -134,5 +170,7 @@ export function pruneTombstones(data: KevlarData, olderThanMs = 365 * 86_400_000
     budgets: keep(data.budgets),
     goals: keep(data.goals),
     recurring: keep(data.recurring),
+    tracks: keep(data.tracks ?? []),
+    tasks: keep(data.tasks ?? []),
   };
 }

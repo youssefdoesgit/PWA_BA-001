@@ -51,6 +51,8 @@ export default function Settings() {
       budgets: data.budgets,
       goals: data.goals,
       recurring: data.recurring,
+      tracks: data.tracks,
+      tasks: data.tasks,
       settings: data.settings,
     };
     const json = JSON.stringify(payload, null, 2);

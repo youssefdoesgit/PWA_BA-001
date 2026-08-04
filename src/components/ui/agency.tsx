@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { color, glyph, mono, radius, space } from '@/theme/tokens';
-import { Bob, Pulse } from './motion';
+import { Bob, Pulse, Scan } from './motion';
 import { Row, Txt } from './primitives';
 
 /* -------------------------------------------------------------------------- */
@@ -115,36 +115,63 @@ export function FieldLabel({ children }: { children: string }) {
 /* -------------------------------------------------------------------------- */
 
 /**
- * BRIC — the assistant's face. An original ASCII construct, not a licensed
- * character: a little armour plate with eyes that change with its mood.
+ * The units. Original ASCII constructs, not licensed characters.
+ *
+ * KEVLAR runs one per subsystem, and they must be tellable apart at a glance
+ * from across a room:
+ *
+ *   · BRIC — banking. A square armour plate. Blinks, bobs, has a mouth.
+ *   · VANE — the docket. A wide sensor housing. Does not blink; it sweeps.
  */
 export type Mood = 'idle' | 'happy' | 'warn' | 'alarm' | 'think';
 
-const FACES: Record<Mood, string> = {
-  idle: '● ●',
-  happy: '^ ^',
-  warn: '● ○',
-  alarm: '× ×',
-  think: '· ●',
+type UnitSpec = {
+  faces: Record<Mood, string>;
+  tones: Record<Mood, string>;
+  /** Shown for a beat when the unit blinks. Absent means it never does. */
+  blink?: string;
+  /** Width as a multiple of height. Silhouette does most of the identifying. */
+  ratio: number;
+  /** What sits below the eyes: a static bar, or a moving sweep. */
+  jaw: 'bar' | 'scan';
 };
 
-const MOOD_TONE: Record<Mood, string> = {
-  idle: color.accent,
-  happy: color.income,
-  warn: color.warn,
-  alarm: color.expense,
-  think: color.transfer,
+const BRIC_SPEC: UnitSpec = {
+  faces: { idle: '● ●', happy: '^ ^', warn: '● ○', alarm: '× ×', think: '· ●' },
+  tones: {
+    idle: color.accent,
+    happy: color.income,
+    warn: color.warn,
+    alarm: color.expense,
+    think: color.transfer,
+  },
+  blink: '– –',
+  ratio: 1,
+  jaw: 'bar',
 };
 
-/** Eyes shut. Shown for a beat whenever BRIC blinks. */
-const BLINK = '– –';
+const VANE_SPEC: UnitSpec = {
+  // Chevrons rather than dots: BRIC watches you, VANE watches the horizon.
+  faces: { idle: '▸ ◂', happy: '▴ ▴', warn: '▾ ▾', alarm: '▮ ▮', think: '· ▸' },
+  tones: {
+    idle: color.transfer,
+    happy: color.income,
+    warn: color.warn,
+    alarm: color.expense,
+    think: color.bone,
+  },
+  ratio: 1.25,
+  jaw: 'scan',
+};
 
-export function Bric({ mood = 'idle', size = 54 }: { mood?: Mood; size?: number }) {
-  const tone = MOOD_TONE[mood];
+function Unit({ spec, mood, size }: { spec: UnitSpec; mood: Mood; size: number }) {
+  const tone = spec.tones[mood];
   const [blinking, setBlinking] = useState(false);
+  const width = size * spec.ratio;
 
   // Irregular blinks read as alive; a fixed interval reads as a loading spinner.
   useEffect(() => {
+    if (!spec.blink) return;
     let timeout: ReturnType<typeof setTimeout>;
     const schedule = () => {
       timeout = setTimeout(
@@ -160,14 +187,13 @@ export function Bric({ mood = 'idle', size = 54 }: { mood?: Mood; size?: number 
     };
     schedule();
     return () => clearTimeout(timeout);
-  }, []);
+  }, [spec.blink]);
 
-  // Alarm state jitters instead of bobbing — it shouldn't look relaxed.
   const body = (
     <View
       style={[
-        s.bric,
-        { width: size, height: size, borderColor: tone, backgroundColor: `${tone}14` },
+        s.unit,
+        { width, height: size, borderColor: tone, backgroundColor: `${tone}14` },
       ]}>
       <Txt
         style={{
@@ -176,36 +202,61 @@ export function Bric({ mood = 'idle', size = 54 }: { mood?: Mood; size?: number 
           color: tone,
           letterSpacing: -1,
         }}>
-        {blinking ? BLINK : FACES[mood]}
+        {blinking && spec.blink ? spec.blink : spec.faces[mood]}
       </Txt>
-      <View
-        style={[
-          s.bricMouth,
-          { backgroundColor: tone, width: size * (mood === 'happy' ? 0.42 : 0.32) },
-        ]}
-      />
+      {spec.jaw === 'scan' ? (
+        // Frozen mid-sweep when something is wrong: a unit that is alarmed is
+        // not still calmly scanning the horizon.
+        mood === 'alarm' ? (
+          <View style={{ width: width * 0.55, height: 2, backgroundColor: tone }} />
+        ) : (
+          <Scan width={width * 0.55} tone={tone} ms={mood === 'think' ? 900 : 1700} />
+        )
+      ) : (
+        <View
+          style={[s.jawBar, { backgroundColor: tone, width: size * (mood === 'happy' ? 0.42 : 0.32) }]}
+        />
+      )}
     </View>
   );
 
+  // Alarm jitters instead of bobbing — it shouldn't look relaxed.
   if (mood === 'alarm') return <Pulse min={0.55} ms={620}>{body}</Pulse>;
   return <Bob distance={2.5} ms={2400}>{body}</Bob>;
 }
 
-/** A speech panel from BRIC. */
-export function BricSays({
-  mood = 'idle',
+export function Bric({ mood = 'idle', size = 54 }: { mood?: Mood; size?: number }) {
+  return <Unit spec={BRIC_SPEC} mood={mood} size={size} />;
+}
+
+export function Vane({ mood = 'idle', size = 54 }: { mood?: Mood; size?: number }) {
+  return <Unit spec={VANE_SPEC} mood={mood} size={size} />;
+}
+
+/** Tone a unit is currently showing, for panels that need to match it. */
+export const bricTone = (mood: Mood): string => BRIC_SPEC.tones[mood];
+export const vaneTone = (mood: Mood): string => VANE_SPEC.tones[mood];
+
+function Says({
+  unit,
+  mood,
   children,
   compact,
 }: {
-  mood?: Mood;
+  unit: 'bric' | 'vane';
+  mood: Mood;
   children: ReactNode;
   compact?: boolean;
 }) {
+  const spec = unit === 'bric' ? BRIC_SPEC : VANE_SPEC;
+  const tone = spec.tones[mood];
+  const size = compact ? 38 : 50;
+
   return (
     <Row style={{ alignItems: 'flex-start', gap: space.md }}>
-      <Bric mood={mood} size={compact ? 38 : 50} />
-      <View style={[s.bubble, { borderColor: `${MOOD_TONE[mood]}55` }]}>
-        <View style={[s.tail, { borderRightColor: `${MOOD_TONE[mood]}55` }]} />
+      <Unit spec={spec} mood={mood} size={size} />
+      <View style={[s.bubble, { borderColor: `${tone}55` }]}>
+        <View style={[s.tail, { borderRightColor: `${tone}55` }]} />
         {typeof children === 'string' ? (
           <Txt variant="caption" style={{ lineHeight: 19 }}>
             {children}
@@ -216,6 +267,16 @@ export function BricSays({
       </View>
     </Row>
   );
+}
+
+/** A speech panel from BRIC. */
+export function BricSays(props: { mood?: Mood; children: ReactNode; compact?: boolean }) {
+  return <Says unit="bric" mood={props.mood ?? 'idle'} compact={props.compact}>{props.children}</Says>;
+}
+
+/** A speech panel from VANE. */
+export function VaneSays(props: { mood?: Mood; children: ReactNode; compact?: boolean }) {
+  return <Says unit="vane" mood={props.mood ?? 'idle'} compact={props.compact}>{props.children}</Says>;
 }
 
 const s = StyleSheet.create({
@@ -231,14 +292,14 @@ const s = StyleSheet.create({
     alignSelf: 'flex-start',
     opacity: 0.9,
   },
-  bric: {
+  unit: {
     borderWidth: 2,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
   },
-  bricMouth: { height: 2, opacity: 0.8 },
+  jawBar: { height: 2, opacity: 0.8 },
   bubble: {
     flex: 1,
     borderWidth: 1,

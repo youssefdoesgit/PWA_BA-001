@@ -36,6 +36,15 @@ type Session = {
   /** Cleared on every cold start, so the lock is asked for each launch. */
   unlocked: boolean;
   setUnlocked: (v: boolean) => void;
+
+  /**
+   * The mainframe's boot sequence has played this launch.
+   *
+   * Session state rather than persisted: it should run once when the app
+   * opens, and not again every time he backs out of a subsystem.
+   */
+  booted: boolean;
+  setBooted: (v: boolean) => void;
 };
 
 let counter = 0;
@@ -58,4 +67,7 @@ export const useSession = create<Session>()((set) => ({
 
   unlocked: false,
   setUnlocked: (v) => set({ unlocked: v }),
+
+  booted: false,
+  setBooted: (v) => set({ booted: v }),
 }));

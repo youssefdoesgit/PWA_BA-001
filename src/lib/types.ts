@@ -1,4 +1,13 @@
-/** KEVLAR domain model. One person, one balance, encrypted before it travels. */
+/**
+ * KEVLAR domain model.
+ *
+ * KEVLAR is a shell hosting several subsystems. Their records live side by side
+ * in one document because they share one owner, one encryption key and one
+ * merge pass — splitting them would mean two of everything for no benefit.
+ *
+ *   · BANKING — one person, one balance
+ *   · DOCKET  — what he is chasing and when it is due
+ */
 
 export type TxKind = 'expense' | 'income';
 
@@ -70,6 +79,66 @@ export type Recurring = Tracked & {
   active: boolean;
 };
 
+/* -------------------------------------------------------------------------- */
+/* DOCKET                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A long-running area of effort — "Scholarships", "Unity", "Portfolio".
+ *
+ * Tracks exist so VANE can tell the difference between a quiet week and an
+ * abandoned ambition. A task with no track is still valid; it just tells him
+ * less.
+ */
+export type Track = Tracked & {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  /** Drives which catalogue leads VANE considers relevant. */
+  field: LeadField;
+  createdAt: number;
+};
+
+/** Where a task sits. `blocked` is deliberately distinct from `open`: it means
+ *  waiting on someone else, which VANE should nag about differently. */
+export type TaskStatus = 'open' | 'active' | 'blocked' | 'done';
+
+/** 0 routine · 1 priority · 2 critical. Numeric so sorting is trivial. */
+export type Priority = 0 | 1 | 2;
+
+/** One line of a checklist. Too small to be worth syncing individually. */
+export type Step = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+export type Task = Tracked & {
+  id: string;
+  title: string;
+  trackId?: string;
+  status: TaskStatus;
+  priority: Priority;
+  /** Epoch ms. Applications have hard deadlines; most other things do not. */
+  due?: number;
+  /** Free-form working notes. The half of this that is a notebook. */
+  notes?: string;
+  /**
+   * Ordered checklist. Merged as one value with the task rather than as
+   * records of their own — two devices editing the same checklist offline is
+   * not a case worth carrying tombstones for.
+   */
+  steps: Step[];
+  /** Set when the task was raised from a catalogue lead, so it is not offered twice. */
+  leadId?: string;
+  createdAt: number;
+  completedAt?: number;
+};
+
+/** Broad areas the opportunity catalogue is filed under. */
+export type LeadField = 'gamedev' | 'scholarship' | 'learning' | 'competition' | 'personal';
+
 export type Settings = {
   /** What BRIC calls you. The only personal detail KEVLAR ever asks for. */
   name: string;
@@ -109,6 +178,18 @@ export type Settings = {
 
   lastBackupAt?: number;
 
+  /* --- Docket ----------------------------------------------------------- */
+
+  /**
+   * Catalogue leads he has waved off, by id.
+   *
+   * Merged as a union rather than last-write-wins: dismissing something on one
+   * device and something else on the other should keep both dismissals.
+   */
+  dismissedLeads?: string[];
+  /** False until VANE has walked him round the docket. Separate from `tourDone`. */
+  docketTourDone?: boolean;
+
   /* --- Sync ------------------------------------------------------------- */
 
   /** Last local change to settings, kept as a coarse fallback. */
@@ -135,10 +216,24 @@ export type Settings = {
 
 export type KevlarData = {
   version: number;
+
+  /* Banking */
   categories: Category[];
   transactions: Transaction[];
   budgets: Budget[];
   goals: Goal[];
   recurring: Recurring[];
+
+  /* Docket */
+  tracks: Track[];
+  tasks: Task[];
+
+  settings: Settings;
+};
+
+/** The docket's slice of the document, for screens that have no use for money. */
+export type DocketData = {
+  tracks: Track[];
+  tasks: Task[];
   settings: Settings;
 };

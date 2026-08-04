@@ -1,7 +1,7 @@
 {
   "name": "KEVLAR",
   "short_name": "KEVLAR",
-  "description": "Personal finance terminal. Local only.",
+  "description": "Personal mainframe. Banking and docket. Local only.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

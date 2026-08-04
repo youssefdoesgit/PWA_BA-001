@@ -239,7 +239,7 @@ export function bricBriefing(data: KevlarData): Briefing {
 
   // Anything genuinely alarming from the advisory comes first.
   for (const i of insights.filter((x) => x.severity === 'alarm').slice(0, 2)) {
-    items.push({ id: i.id, text: i.title, tone: 'urgent', href: '/advisor' });
+    items.push({ id: i.id, text: i.title, tone: 'urgent', href: '/bank/advisor' });
   }
 
   // Money leaving in the next couple of days.
@@ -253,7 +253,7 @@ export function bricBriefing(data: KevlarData): Briefing {
         overdue.length > 0
       ),
       tone: overdue.length > 0 ? 'urgent' : 'warn',
-      href: '/goals',
+      href: '/bank/goals',
     });
   }
 
@@ -274,7 +274,7 @@ export function bricBriefing(data: KevlarData): Briefing {
 
   // Then the warnings, then whatever is going well.
   for (const i of insights.filter((x) => x.severity === 'warn').slice(0, 2)) {
-    items.push({ id: i.id, text: i.title, tone: 'warn', href: '/advisor' });
+    items.push({ id: i.id, text: i.title, tone: 'warn', href: '/bank/advisor' });
   }
   if (items.length === 0) {
     const good = insights.find((x) => x.severity === 'good');
@@ -282,7 +282,7 @@ export function bricBriefing(data: KevlarData): Briefing {
       id: good?.id ?? 'quip',
       text: good?.title ?? bricQuip(data),
       tone: 'good',
-      href: '/advisor',
+      href: '/bank/advisor',
     });
   }
 
